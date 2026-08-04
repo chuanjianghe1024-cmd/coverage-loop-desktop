@@ -134,9 +134,14 @@ public class MavenRunner {
             baseArgs.add(String.join(",", config.maven.profiles));
         }
         if (!options.fullProject && config.selectedModulePaths != null && !config.selectedModulePaths.isEmpty()) {
-            baseArgs.add("-pl");
-            baseArgs.add(String.join(",", config.selectedModulePaths));
-            baseArgs.add("-am");
+            // 根模块（"."）不能作为 -pl 参数；过滤后为空表示单模块项目，直接构建整个根项目
+            List<String> modulePaths = config.selectedModulePaths.stream()
+                    .filter(path -> !".".equals(path)).toList();
+            if (!modulePaths.isEmpty()) {
+                baseArgs.add("-pl");
+                baseArgs.add(String.join(",", modulePaths));
+                baseArgs.add("-am");
+            }
         }
 
         List<String> args = new ArrayList<>(baseArgs);

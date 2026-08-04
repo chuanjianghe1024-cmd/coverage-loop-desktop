@@ -53,7 +53,11 @@ public final class ProjectScanner {
         walk(rootPomPath, rootProject, rootDirectory, visited, result);
 
         result.modules.sort((a, b) -> a.relativePath.compareTo(b.relativePath));
-        if (result.modules.isEmpty()) result.warnings.add("根 POM 中没有发现可扫描的 <modules>");
+        if (result.modules.isEmpty()) {
+            // 单模块项目：没有 <modules> 时把根项目本身作为唯一模块（relativePath="."）
+            result.modules.add(buildModule(rootDirectory, rootDirectory, rootPomPath, rootProject));
+            result.warnings.add("未发现 <modules>，已将根项目作为单模块处理");
+        }
         if (!XmlUtil.list(rootProject, "profiles").isEmpty()) {
             result.warnings.add("已展示 profile 中声明的模块；实际构建时仍需选择对应 Maven Profile");
         }

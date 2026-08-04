@@ -24,6 +24,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -195,5 +196,79 @@ class MavenLoopIntegrationTest {
         var scan = ProjectScanner.scanMavenProject(freshPom);
         assertTrue(CoverageStatisticsService
                 .coverageStatisticsExecutionModulePaths(scan, statistics.config).isEmpty());
+    }
+
+    @Test
+    void singleModuleProjectScansRootAsModule() throws Exception {
+        Path single = Files.createTempDirectory("coverage-loop-single");
+        writeSingleModuleProject(single);
+        String pom = new File(single.toFile(), "pom.xml").getPath();
+        ProjectScanResult scan = ProjectScanner.scanMavenProject(pom);
+        assertEquals(1, scan.modules.size(), "单模块项目应扫描出根模块");
+        var root = scan.modules.get(0);
+        assertEquals(".", root.relativePath);
+        assertTrue(root.hasMainSources);
+        assertTrue(root.hasTests);
+        // 源码扫描
+        var sources = ProjectScanner.scanModuleSources(root);
+        assertTrue(sources.sourceFileCount >= 1);
+        assertTrue(sources.testFileCount >= 1);
+    }
+
+    @Test
+    void singleModuleMavenRoundRunsWithoutPl() throws Exception {
+        Path single = Files.createTempDirectory("coverage-loop-single-run");
+        writeSingleModuleProject(single);
+        String pom = new File(single.toFile(), "pom.xml").getPath();
+        ProjectConfig config = com.coverageloop.model.ConfigFactory.createDefaultConfig(pom);
+        config.id = "single-test";
+        config.selectedModulePaths = List.of(".");
+        config.maven.useBundledMaven = true;
+        config.maven.preInstall = false;
+        config.coverage.jacocoVersion = "0.8.8";
+        config.coverage.lineThreshold = 50;
+
+        MavenRunner runner = newRunner();
+        MavenRunResult result = runner.run(config, null, new MavenRunner.RunOptions());
+        assertEquals(0, result.exitCode, "单模块 Maven 应成功");
+        assertFalse(result.command.args.contains("-pl"), "单模块项目不应出现 -pl 参数");
+        assertEquals(1, result.coverage.size());
+        assertEquals(".", result.coverage.get(0).modulePath);
+        assertEquals("jacoco", result.coverage.get(0).source);
+        assertTrue(result.coverage.get(0).classCount >= 1);
+        assertTrue(result.coverage.get(0).lineCoverage > 0);
+    }
+
+    private static void writeSingleModuleProject(Path root) throws Exception {
+        String pom = "<?xml version=\"1.0\"?><project><modelVersion>4.0.0</modelVersion>"
+                + "<groupId>com.single</groupId><artifactId>single-app</artifactId><version>1.0.0</version>"
+                + "<properties><maven.compiler.release>17</maven.compiler.release>"
+                + "<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>"
+                + "<dependencies><dependency><groupId>org.junit.jupiter</groupId>"
+                + "<artifactId>junit-jupiter</artifactId><version>5.10.2</version><scope>test</scope>"
+                + "</dependency></dependencies>"
+                + "<build><plugins><plugin><groupId>org.apache.maven.plugins</groupId>"
+                + "<artifactId>maven-surefire-plugin</artifactId><version>3.2.5</version>"
+                + "</plugin></plugins></build></project>";
+        Fs.writeString(new File(root.toFile(), "pom.xml").getPath(), pom);
+        Fs.writeString(new File(root.toFile(), "src/main/java/com/single/App.java").getPath(),
+                "package com.single;\npublic class App {\n"
+                        + "    public String hello(String name) {\n"
+                        + "        return name == null || name.isBlank() ? \"world\" : name;\n"
+                        + "    }\n"
+                        + "    public int add(int a, int b) {\n"
+                        + "        return a + b;\n"
+                        + "    }\n"
+                        + "}\n");
+        Fs.writeString(new File(root.toFile(), "src/test/java/com/single/AppTest.java").getPath(),
+                "package com.single;\nimport org.junit.jupiter.api.Test;\n"
+                        + "import static org.junit.jupiter.api.Assertions.assertEquals;\n"
+                        + "class AppTest {\n"
+                        + "    @Test\n    void works() {\n"
+                        + "        App app = new App();\n"
+                        + "        assertEquals(\"world\", app.hello(\"\"));\n"
+                        + "        assertEquals(3, app.add(1, 2));\n"
+                        + "    }\n"
+                        + "}\n");
     }
 }
