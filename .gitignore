@@ -1,0 +1,23 @@
+# Maven
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# 内置工具链（如需重新分发自行拷贝）
+resources/toolchain/maven/
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 运行产物（测试样例项目在 target/test-classes 下生成）
+*.log
