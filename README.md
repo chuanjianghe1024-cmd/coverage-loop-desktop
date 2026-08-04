@@ -18,8 +18,27 @@ Agent 自动循环补充测试，直到目标类达到行覆盖率门槛。功�
 # 需要 JDK 17+（JAVA_HOME 指向本机 JDK）
 mvn -q compile          # 编译
 mvn test                # 单元 + 集成测试（集成测试会真实运行 Maven + JaCoCo）
-mvn javafx:run          # 启动桌面应用（或直接运行 run.cmd）
+mvn javafx:run          # 方式一：Maven 插件启动（module path）
+mvn -q package -DskipTests
+java -jar target/coverage-loop-desktop-0.5.2.jar   # 方式二：可执行 fat jar（含 JavaFX/Gson）
 ```
+
+Windows 下也可以直接双击/运行 `run.cmd`（Maven 插件方式）或 `run-jar.cmd`（fat jar 方式，首次自动构建）。
+
+### IntelliJ IDEA 运行说明
+
+直接 Run `App.java`（继承 Application 的类）会报
+“错误: 缺少 JavaFX 运行时组件”（JavaFX 只在 classpath 时 JVM 启动器的限制）。
+
+正确做法二选一：
+
+1. 运行 `com.coverageloop.Launcher`（主类不继承 Application，内部调用
+   `Application.launch(App.class, ...)`，classpath 下可用）。如果 IDE 没有自动识别，
+   在 Run Configuration → Main class 填 `com.coverageloop.Launcher`。
+2. 或直接在 IDE 终端执行 `mvn javafx:run`（走 module path，无警告）。
+
+`java -jar` 方式 stderr 出现 `Unsupported JavaFX configuration` 警告是 classpath 运行
+的正常提示，不影响使用（main class 是 Launcher，不会触发“缺少 JavaFX 运行时组件”）。
 
 内置 Maven 说明：程序按 内置（resources/toolchain/maven）→ 配置指定 → 项目 mvnw → 系统
 MAVEN_HOME/M2_HOME/PATH 的顺序解析 mvn；JDK 优先使用配置的 JDK 根目录，其次 JAVA_HOME。
