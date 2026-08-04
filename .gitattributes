@@ -1,0 +1,8 @@
+# 批处理文件统一 CRLF（cmd 解析要求），其余保持 LF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.java text eol=lf
+*.xml text eol=lf
+*.md text eol=lf
+*.sh text eol=lf

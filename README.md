@@ -15,7 +15,7 @@ Agent 自动循环补充测试，直到目标类达到行覆盖率门槛。功�
 ## 构建与运行
 
 ```bash
-# 需要 JDK 17+（JAVA_HOME 指向本机 JDK）
+# 需要 JDK 17+（脚本会自动探测 JAVA_HOME / E:\tools\jdk-17* / IntelliJ JBR）
 mvn -q compile          # 编译
 mvn test                # 单元 + 集成测试（集成测试会真实运行 Maven + JaCoCo）
 mvn javafx:run          # 方式一：Maven 插件启动（module path）

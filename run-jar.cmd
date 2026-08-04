@@ -1,26 +1,30 @@
 @echo off
-rem Coverage Loop Desktop - 双击/命令行启动（推荐，fat jar 方式）
-rem 需要 JDK 17+；首次运行自动用 Maven Wrapper 构建可执行 jar
+rem Coverage Loop Desktop - recommended launch (fat jar)
+rem Auto-detect JDK 17+: JAVA_HOME -> E:\tools\jdk-17* -> IntelliJ JBR
 setlocal
-if "%JAVA_HOME%"=="" (
-  echo [ERROR] 请先设置 JAVA_HOME 指向 JDK 17 及以上
-  pause
-  exit /b 1
-)
+call "%~dp0scripts\find-jdk.cmd"
+if not defined JDK_HOME goto :nojdk
+set "JAVA_HOME=%JDK_HOME%"
 cd /d "%~dp0"
-if not exist "target\coverage-loop-desktop-0.5.2.jar" (
-  echo [INFO] 首次运行，正在构建可执行 jar（mvn package -DskipTests）...
-  if exist "mvnw.cmd" (
-    call mvnw.cmd -q package -DskipTests
-  ) else (
-    call mvn -q package -DskipTests
-  )
-  if errorlevel 1 (
-    echo [ERROR] 构建失败，请检查网络与 Maven 环境
-    pause
-    exit /b 1
-  )
-)
-echo [INFO] 启动 Coverage Loop Desktop ...
-java -jar "target\coverage-loop-desktop-0.5.2.jar"
+if exist "target\coverage-loop-desktop-0.5.2.jar" goto :launch
+echo [INFO] First run: building executable jar with maven...
+if exist "mvnw.cmd" goto :usewrapper
+call mvn -q package -DskipTests
+goto :checkbuild
+:usewrapper
+call mvnw.cmd -q package -DskipTests
+:checkbuild
+if errorlevel 1 goto :buildfail
+:launch
+echo [INFO] Starting Coverage Loop Desktop ...
+"%JAVA_HOME%\bin\java.exe" -jar "target\coverage-loop-desktop-0.5.2.jar"
+goto :done
+:nojdk
+echo [ERROR] JDK 17+ not found. Set JAVA_HOME to a JDK 17+ install.
+pause
+goto :done
+:buildfail
+echo [ERROR] Build failed. Check network and Maven environment.
+pause
+:done
 endlocal
