@@ -10,6 +10,7 @@ import com.coverageloop.model.ProjectScanResult;
 import com.coverageloop.model.TestExecutionStatus;
 import com.coverageloop.service.ConfigStore;
 import com.coverageloop.service.CoverageReader;
+import com.coverageloop.service.CoverageStatisticsService;
 import com.coverageloop.service.MavenRunner;
 import com.coverageloop.service.ProjectScanner;
 import com.coverageloop.util.Fs;
@@ -24,6 +25,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** 端到端集成测试：真实 Maven + JaCoCo 运行样例项目 */
@@ -171,5 +173,27 @@ class MavenLoopIntegrationTest {
         var summaries = ConfigStore.listProjectConfigs(rootPom);
         assertTrue(summaries.stream().anyMatch(s -> s.id.equals("test-config")));
         assertTrue(ConfigStore.deleteProjectConfig(rootPom, "test-config"));
+    }
+
+    @Test
+    void freshProjectWithoutCoverageLoopDirLoadsCleanly() throws Exception {
+        // 全新项目：.coverage-loop 目录不存在时，加载配置/统计不得抛 NPE
+        Path freshRoot = Files.createTempDirectory("coverage-loop-fresh");
+        String freshPom = new File(freshRoot.toFile(), "pom.xml").getPath();
+        Fs.writeString(freshPom, "<?xml version=\"1.0\"?><project><modelVersion>4.0.0</modelVersion>"
+                + "<groupId>t</groupId><artifactId>t</artifactId><version>1</version></project>");
+        // 无配置时返回 null（初始化流程会用默认配置兜底），且不得抛 NPE
+        assertNull(ConfigStore.loadProjectConfig(freshPom, null));
+        assertTrue(ConfigStore.listProjectConfigs(freshPom).isEmpty());
+        ProjectConfig fallback = com.coverageloop.model.ConfigFactory.createDefaultConfig(freshPom);
+        assertNotNull(fallback);
+        assertEquals("default", fallback.id);
+        var statistics = CoverageStatisticsService.loadCoverageStatisticsState(freshPom);
+        assertNotNull(statistics.config);
+        assertEquals("group-1", statistics.config.groups.get(0).id);
+        // 统计执行模块（无模块）应为空且不抛异常
+        var scan = ProjectScanner.scanMavenProject(freshPom);
+        assertTrue(CoverageStatisticsService
+                .coverageStatisticsExecutionModulePaths(scan, statistics.config).isEmpty());
     }
 }

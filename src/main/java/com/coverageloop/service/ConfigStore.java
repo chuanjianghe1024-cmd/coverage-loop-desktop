@@ -157,12 +157,15 @@ public final class ConfigStore {
     private static List<ProjectConfig> readAllConfigs(String rootPomPath) {
         List<ProjectConfig> configs = new ArrayList<>();
         String directory = configsDirectoryForPom(rootPomPath);
-        for (File entry : new File(directory).listFiles()) {
-            if (!entry.isFile() || !entry.getName().endsWith(".json")) continue;
-            try {
-                configs.add(parseConfig(Fs.readString(entry.getPath()), rootPomPath));
-            } catch (Exception error) {
-                // 跳过损坏的配置文件
+        File[] files = new File(directory).listFiles();
+        if (files != null) {
+            for (File entry : files) {
+                if (!entry.isFile() || !entry.getName().endsWith(".json")) continue;
+                try {
+                    configs.add(parseConfig(Fs.readString(entry.getPath()), rootPomPath));
+                } catch (Exception error) {
+                    // 跳过损坏的配置文件
+                }
             }
         }
         if (configs.isEmpty()) {

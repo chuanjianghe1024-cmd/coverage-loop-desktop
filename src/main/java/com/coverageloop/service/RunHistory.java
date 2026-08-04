@@ -57,11 +57,14 @@ public final class RunHistory {
         Fs.mkdirs(runDirectory);
 
         int maxRound = 0;
-        for (File entry : new File(runDirectory).listFiles()) {
-            java.util.regex.Matcher matcher = java.util.regex.Pattern
-                    .compile("^round-(\\d{3})-maven\\.log$").matcher(entry.getName());
-            if (matcher.matches()) {
-                maxRound = Math.max(maxRound, Integer.parseInt(matcher.group(1)));
+        File[] runEntries = new File(runDirectory).listFiles();
+        if (runEntries != null) {
+            for (File entry : runEntries) {
+                java.util.regex.Matcher matcher = java.util.regex.Pattern
+                        .compile("^round-(\\d{3})-maven\\.log$").matcher(entry.getName());
+                if (matcher.matches()) {
+                    maxRound = Math.max(maxRound, Integer.parseInt(matcher.group(1)));
+                }
             }
         }
         int round = maxRound + 1;
