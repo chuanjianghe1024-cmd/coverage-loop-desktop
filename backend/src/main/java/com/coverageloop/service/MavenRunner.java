@@ -171,7 +171,8 @@ public class MavenRunner {
         }
         if (!config.maven.forceUpdate && config.maven.extraArgs.stream().anyMatch(a -> a.equals("-U")||a.equals("--update-snapshots"))) baseArgs.add("-U");
         List<String> args = new ArrayList<>(baseArgs);
-        if (options.scopeTests) args.remove("-am");
+        // Keep internal dependency models in the reactor, including unresolved parent versions.
+        if (options.scopeTests) args.add("--fail-at-end");
         if (!hasSystemProperty(config.maven.extraArgs, "failIfNoTests")) {
             args.add("-DfailIfNoTests=false");
         }
@@ -258,6 +259,11 @@ public class MavenRunner {
         Integer preInstallExitCode = null;
         try {
             if (shouldPreInstall && command.preInstallArgs != null) {
+                if (options.scopeTests) {
+                    command.preInstallArgs=new ArrayList<>(command.preInstallArgs);
+                    ReactorScope.prepare(config,prepared,command.preInstallArgs);
+                    command.preInstallArgs.add("-Dcoverage.loop.preinstall=true");
+                }
                 phase[0] = "pre-install"; buildProgress.begin(phase[0]);
                 output(prepared, "system", "预构建（跳过测试）：" + command.executable + " "
                         + String.join(" ", command.preInstallArgs) + "\n");
@@ -373,25 +379,27 @@ public class MavenRunner {
             AtomicReference<LogWriter> writer, String[] phase) throws Exception {
         buildProgress.begin("coverage");
         if (!options.scopeTests) return execute(prepared,config,command,command.args,outputAt,buffer,writer,phase);
-        ProcessExecution combined=new ProcessExecution(); combined.exitCode=0;
-        int index=0;
+        List<String> arguments=new ArrayList<>(command.args);
+        java.nio.file.Path ready=ReactorScope.prepare(config,prepared,arguments);
+        command.args=arguments;
         for (ScopedTests.Selection selection:ScopedTests.plan(config)) {
-            ProjectConfig one=config.copy(); one.selectedModulePaths=List.of(selection.modulePath());
-            MavenCommandPreview moduleCommand=resolveMavenCommand(one,options);
-            List<String> arguments=new ArrayList<>(moduleCommand.args);
-            arguments.addAll(ScopedTests.writeFilters(selection,java.nio.file.Path.of(prepared.runDirectory),++index));
             output(prepared,"system","范围测试："+selection.modulePath()+"，生产类 "+selection.sourceCount()
                     +"，测试文件 "+selection.tests().size()+"；清单已写入本轮目录\n");
-            buildProgress.module(selection.modulePath(),"scanning","running");
-            updateProgress(prepared,35,MavenProgressStage.resolving,"正在测试模块 "+selection.modulePath());
-            ProcessExecution result=execute(prepared,one,moduleCommand,arguments,outputAt,buffer,writer,phase);
-            buildProgress.flush();
-            buildProgress.module(selection.modulePath(),selection.tests().isEmpty()?"no-tests":"finished",!Objects.equals(result.exitCode,0)?"failed":selection.tests().isEmpty()?"skipped":moduleTestsFailed(one)?"failed":"success");
-            updateProgress(prepared,85,MavenProgressStage.summarizing,"模块 "+selection.modulePath()+" 执行结束");
-            if (!Objects.equals(result.exitCode,0)) combined.exitCode=result.exitCode;
-            if (result.signal!=null) combined.signal=result.signal;
         }
-        return combined;
+        output(prepared,"system","根 reactor 范围测试：依赖参与构建，按模块执行所选测试\n");
+        ProcessExecution result=execute(prepared,config,command,arguments,outputAt,buffer,writer,phase);
+        if (Objects.equals(result.exitCode,0)&&!java.nio.file.Files.isRegularFile(ready)) {
+            result.exitCode=1;
+            output(prepared,"system","Maven 未确认模块测试范围已生效，本轮结果无效；请检查 Maven Wrapper 是否保留扩展参数\n");
+        }
+        buildProgress.end(result.exitCode==null?-1:result.exitCode);
+        for (ScopedTests.Selection selection:ScopedTests.plan(config)) {
+            var state=buildProgress.snapshot().stream().filter(s->s.phase.equals("coverage")&&s.modulePath.equals(selection.modulePath())).findFirst().orElse(null);
+            if(state==null||!state.status.equals("success"))continue;
+            ProjectConfig one=config.copy();one.selectedModulePaths=List.of(selection.modulePath());
+            buildProgress.module(selection.modulePath(),selection.tests().isEmpty()?"no-tests":"finished",selection.tests().isEmpty()?"skipped":moduleTestsFailed(one)?"failed":"success");
+        }
+        return result;
     }
 
     private boolean moduleTestsFailed(ProjectConfig config) {
@@ -426,6 +434,10 @@ public class MavenRunner {
                 }
             }
         }
+        String invocation="["+Instant.now()+"] [system] ["+phase[0]+"] cwd="+command.workingDirectory+"\n"
+                +com.coverageloop.util.Json.toJson(cmdLine)+"\n";
+        java.nio.file.Files.writeString(java.nio.file.Path.of(prepared.logPath),invocation,StandardCharsets.UTF_8,
+                java.nio.file.StandardOpenOption.CREATE,java.nio.file.StandardOpenOption.APPEND);
         Process process = builder.start();
         child.set(process);
         if (cancelled.getAsBoolean() || stopRequested) Proc.killTree(process.pid());

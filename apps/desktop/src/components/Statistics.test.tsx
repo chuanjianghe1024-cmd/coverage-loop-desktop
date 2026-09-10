@@ -1,7 +1,7 @@
 import {render,screen,waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {beforeEach,test,expect,vi} from 'vitest';
-import {config,project} from '../test/fixtures';
+import {config,project,round} from '../test/fixtures';
 import type {Config,Snapshot,StatisticsNode} from '../lib/types';
 const bridge=vi.hoisted(()=>({request:vi.fn(),choosePath:vi.fn(),openArtifact:vi.fn()}));
 vi.mock('../lib/api',()=>({api:bridge}));
@@ -11,6 +11,7 @@ let stored:Config[]=[];
 beforeEach(()=>{stored=[];bridge.request.mockReset();bridge.request.mockImplementation(async(route:string,payload:{config:Config;id:string})=>{
  if(route==='/statistics/configs')return structuredClone(stored);
  if(route==='/statistics/preview')return [{modulePath:'module-a',sourceCount:1,packages:['com.sample.a'],tests:['com.sample.a.GreeterTest']}];
+ if(route==='/round/records')return {files:[],directory:'/sample',recovery:{available:false,reason:'没有会话'}};
  if(route==='/statistics/save'){stored=[...stored.filter(c=>c.id!==payload.config.id),structuredClone(payload.config)];return {configs:structuredClone(stored),path:'/sample/.coverage-loop/statistics/configs/'+payload.config.id+'.json'};}
  if(route==='/statistics/delete'){stored=stored.filter(c=>c.id!==payload.id);return structuredClone(stored);}
  throw Error(route);
@@ -43,4 +44,11 @@ test('result tree shows exact counters and distinguishes unavailable reports',as
  expect(screen.getAllByText('3 行 / 10 行')).toHaveLength(2);expect(screen.getAllByText('30.00%')).toHaveLength(2);
  rerender(<StatisticsResult node={{...root,measured:false,lineCoverage:null,children:[]}}/>);
  expect(screen.getByText('未测')).toBeInTheDocument();expect(screen.queryByText('0.00%')).not.toBeInTheDocument();
+});
+test('historical build failure keeps its reports but suppresses the overall coverage percentage',async()=>{
+ const failed=round(1,100,0);failed.exitCode=1;failed.tests.status='build-failed';failed.tests.failureKind='dependency-resolution';failed.tests.message='请检查父 POM 版本';
+ const historical:Snapshot={...idle,id:'old-job',mode:'statistics',status:'failed',latest:failed,rounds:[failed],statistics:{id:'p',name:'project',kind:'project',coveredLines:10,totalLines:10,classCount:1,lineCoverage:100,measured:true,children:[]}};
+ render(<Statistics data={project} base={config} snapshot={idle} historical={historical} onStart={vi.fn()} onStop={vi.fn()} busy={false} notify={vi.fn()}/>);
+ await waitFor(()=>expect(screen.getByRole('button',{name:'新建'})).toBeEnabled());
+ expect(screen.getByRole('alert')).toHaveTextContent('依赖解析失败，本轮覆盖率无效');expect(screen.queryByText('100.00%')).not.toBeInTheDocument();expect(screen.getByText('等待完整报告')).toBeInTheDocument();
 });

@@ -136,6 +136,8 @@ public final class RunHistory {
                                                          String startedAt, String finishedAt,
                                                          Integer exitCode, TestExecutionResult tests) {
         Fs.mkdirs(prepared.runDirectory);
+        boolean buildInvalid=tests.status==com.coverageloop.model.TestExecutionStatus.build_failed
+                ||tests.status==com.coverageloop.model.TestExecutionStatus.aborted;
         String baselinePath = new File(prepared.runDirectory, "baseline-coverage.json").getPath();
         CoverageBaseline baseline;
         if (Fs.exists(baselinePath)) {
@@ -144,7 +146,7 @@ public final class RunHistory {
             baseline = new CoverageBaseline();
             baseline.createdAt = finishedAt;
             baseline.classes = flattenClasses(coverage);
-            if (!baseline.classes.isEmpty()) {
+            if (!buildInvalid && !baseline.classes.isEmpty()) {
                 Fs.writeString(baselinePath, Json.toJson(baseline) + "\n");
             }
         }
@@ -161,22 +163,24 @@ public final class RunHistory {
             int total = item.coveredLines + item.missedLines;
             failedClassLines.add(String.format("%d. [%s] %s | LINE=%s | covered=%d/%d", index++,
                     item.modulePath, item.qualifiedName,
-                    coverage.stream().anyMatch(m -> m.modulePath.equals(item.modulePath)&&"jacoco".equals(m.source)) ? item.currentLineCoverage+"%" : "未测",
+                    buildInvalid ? "未评估（构建未完成）" : coverage.stream().anyMatch(m -> m.modulePath.equals(item.modulePath)&&"jacoco".equals(m.source)) ? item.currentLineCoverage+"%" : "未测",
                     item.coveredLines, total));
         }
         List<String> gateLines = new ArrayList<>();
         gateLines.add("JaCoCo Coverage Gate - Round " + prepared.round);
         gateLines.add("LINE threshold : " + config.coverage.lineThreshold + "%");
+        if(buildInvalid)gateLines.add("BUILD_FAILED_COVERAGE_INVALID: "+tests.message);
         gateLines.add("Initial passed : " + groups.initialSatisfied.size());
         gateLines.add("Supplemented   : " + groups.supplemented.size());
-        gateLines.add("Remaining      : " + groups.pending.size());
-        gateLines.add(coverage.stream().anyMatch(m -> !"jacoco".equals(m.source)) ? "COVERAGE_INCOMPLETE" : groups.pending.isEmpty() ? "ALL_TARGETS_PASS" : "COVERAGE_GATE_FAILED");
+        gateLines.add("Remaining      : " + (buildInvalid?"NOT_EVALUATED":groups.pending.size()));
+        gateLines.add(buildInvalid ? "COVERAGE_NOT_EVALUATED" : coverage.stream().anyMatch(m -> !"jacoco".equals(m.source)) ? "COVERAGE_INCOMPLETE" : groups.pending.isEmpty() ? "ALL_TARGETS_PASS" : "COVERAGE_GATE_FAILED");
         gateLines.add("");
         gateLines.addAll(failedClassLines);
         gateLines.add("");
         Fs.writeString(coverageGatePath, String.join("\n", gateLines));
 
-        Fs.writeString(failedClassesPath, failedClassLines.isEmpty() ? "" : String.join("\n", failedClassLines) + "\n");
+        Fs.writeString(failedClassesPath, (buildInvalid?"# 构建未完成：以下仅为待评估范围，不代表覆盖率未达标。\n":"")
+                + (failedClassLines.isEmpty() ? "" : String.join("\n", failedClassLines) + "\n"));
 
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("runId", prepared.runId);
@@ -186,6 +190,7 @@ public final class RunHistory {
         snapshot.put("startedAt", startedAt);
         snapshot.put("finishedAt", finishedAt);
         snapshot.put("exitCode", exitCode);
+        snapshot.put("coverageEvaluated", !buildInvalid);
         snapshot.put("tests", tests);
         snapshot.put("coverage", coverage);
         snapshot.put("groups", groups);

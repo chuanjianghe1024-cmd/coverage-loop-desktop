@@ -19,3 +19,10 @@ test('coverage is line-weighted and source fallback is not a measured percentage
  expect(metrics(r).coverage).toBe(5);
  r.coverage[0].source='source-fallback';expect(metrics(r).coverage).toBeNull();
 });
+test('dependency failure shows an invalid round instead of a coverage deficit or a zero percent result',()=>{
+ const failed=round(3,0,0);failed.exitCode=1;failed.tests.status='build-failed';failed.tests.failureKind='dependency-resolution';failed.tests.message='请检查父 POM 版本';
+ render(<Dashboard config={config} snapshot={{...snapshot,status:'failed',rounds:[failed],latest:failed}} logs={[]} onStart={vi.fn()} onStop={vi.fn()} busy={false} notify={vi.fn()} historical/>);
+ expect(within(screen.getByRole('alert')).getByText('依赖解析失败，本轮覆盖率无效')).toBeInTheDocument();
+ expect(screen.getByRole('button',{name:/待评估类/})).toBeInTheDocument();expect(screen.getByText('未评估')).toBeInTheDocument();
+ expect(metrics(failed).coverage).toBeNull();expect(screen.queryByText('0.0%')).not.toBeInTheDocument();
+});

@@ -170,7 +170,10 @@ public final class DesktopEngine implements AutoCloseable {
                     MavenRunner.RunOptions options=new MavenRunner.RunOptions(); options.scopeTests=true; options.continueOnTestFailure=true;
                     MavenRunResult result = maven.run(config, null, options);
                     if (taskMode.equals("statistics")) {
-                        synchronized(this) { statistics=StatisticsTree.build(config,result.coverage); }
+                        synchronized(this) {
+                            statistics=StatisticsTree.build(config,result.coverage);
+                            if(result.tests.status==TestExecutionStatus.build_failed||result.tests.status==TestExecutionStatus.aborted){statistics.measured=false;statistics.lineCoverage=null;}
+                        }
                         Fs.writeString(Path.of(result.runDirectory,"statistics-tree.json").toString(),Json.toJson(statistics)+"\n");
                     }
                     recordRound(result);
@@ -178,7 +181,8 @@ public final class DesktopEngine implements AutoCloseable {
                         latest = result;
                         boolean valid = CoverageLoopRunner.canCollectCoverage(result);
                         status = Objects.equals(result.exitCode, 0) && result.tests.status != TestExecutionStatus.test_failed && valid ? "completed" : "failed";
-                        message = valid ? result.tests.message : "缺少本轮有效 JaCoCo 报告或范围未匹配到类，请检查日志";
+                        message = valid || result.tests.status==TestExecutionStatus.build_failed || result.tests.status==TestExecutionStatus.aborted
+                                ? result.tests.message : "缺少本轮有效 JaCoCo 报告或范围未匹配到类，请检查日志";
                     }
                 }
                 case "probe" -> {

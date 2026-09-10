@@ -47,11 +47,11 @@ class StatisticsIntegrationTest {
         MavenRunResult result=runner.run(c,null,options);
         assertEquals(0,result.exitCode,()->Fs.readStringQuiet(result.logPath));
         assertEquals(TestExecutionStatus.passed,result.tests.status,()->Fs.readStringQuiet(result.logPath));
-        assertFalse(result.command.args.contains("-am"));assertTrue(result.command.preInstallArgs.contains("-am"));
+        assertTrue(result.command.args.contains("-am"));assertTrue(result.command.preInstallArgs.contains("-am"));
         assertFalse(Files.exists(temp.resolve("module-b/target/surefire-reports")));
         assertFalse(Files.exists(temp.resolve("module-a/target/surefire-reports/TEST-com.other.MustNotRunTest.xml")));
         assertEquals(List.of("com.sample.a.Greeter"),result.coverage.get(0).classes.stream().map(x->x.qualifiedName).toList());
-        assertTrue(Files.exists(Path.of(result.runDirectory,"module-1-tests.include")));
+        assertTrue(Files.exists(Path.of(result.runDirectory,"round-001-scope/module-1-tests.include")));
         var tree=StatisticsTree.build(c,result.coverage);assertTrue(tree.measured);assertEquals(1,tree.classCount);assertNotNull(tree.lineCoverage);
     }
     @Test void multipleConfigurationsPersistAsSeparateFilesAndNeverReplaceLoopConfig() throws Exception {
@@ -68,12 +68,58 @@ class StatisticsIntegrationTest {
             assertTrue(Files.exists(WorkspaceStore.statisticsConfigPath(c)));
         }
     }
+    @Test void reactorResolvesPlaceholderParentsAndSkipsDependencyTestsEvenWithIdenticalClassNames() throws Exception {
+        temp=Files.createDirectories(temp.resolve("工程 空格"));
+        ProjectConfig c=fixture();c.selectedModulePaths=List.of("module-b");c.maven.versionNumber="1.0.0";c.maven.parallelThreads=2;
+        String group="com.coverageloop.reactor.g"+UUID.randomUUID().toString().replace("-","");
+        for(String file:List.of("pom.xml","module-a/pom.xml","module-b/pom.xml")){
+            Path pom=temp.resolve(file);String xml=Files.readString(pom).replace("<groupId>com.sample</groupId>","<groupId>"+group+"</groupId>").replace("<version>1.0.0</version>","<version>${version_number}</version>");
+            if(file.equals("pom.xml"))xml=xml.replace("<properties>","<properties><version_number>1.0.0</version_number>").replace("<version>3.2.5</version>","<version>3.2.5</version><configuration><skipTests>false</skipTests><includes><include>**/*.java</include></includes></configuration><executions><execution><id>default-test</id><configuration><skipTests>false</skipTests><includes><include>**/*.java</include></includes></configuration></execution></executions>");
+            if(file.startsWith("module-b"))xml=xml.replace("</project>","<dependencies><dependency><groupId>"+group+"</groupId><artifactId>module-a</artifactId><version>${version_number}</version></dependency></dependencies></project>");
+            Files.writeString(pom,xml);
+        }
+        Fs.writeString(temp.resolve("module-a/src/test/java/com/sample/b/CalculatorTest.java").toString(),"package com.sample.b; class CalculatorTest { @org.junit.jupiter.api.Test void mustNotRun(){throw new AssertionError(\"dependency test with same name ran\");} }");
+        Path chosen=temp.resolve("module-b/src/main/java/com/sample/b/Calculator.java");
+        Files.writeString(chosen,Files.readString(chosen).replace("class Calculator {","class Calculator { public Class<?> dependencyType(){return com.sample.a.Greeter.class;}"));
+        Map<Path,String> poms=new HashMap<>();for(String file:List.of("pom.xml","module-a/pom.xml","module-b/pom.xml"))poms.put(temp.resolve(file),Files.readString(temp.resolve(file)));
+        var paths=new MavenRunner.RunnerPaths();paths.resourcesPath=temp.toString();paths.developmentRoot=temp.toString();
+        var runner=new MavenRunner(paths,new MavenRunner.OutputSink(){public void output(MavenOutputEvent e){}public void progress(MavenProgressEvent e){}});
+        var options=new MavenRunner.RunOptions();options.scopeTests=true;options.continueOnTestFailure=true;
+        MavenRunResult first=runner.run(c,null,options);
+        assertEquals(0,first.exitCode,()->Fs.readStringQuiet(first.logPath));assertEquals(TestExecutionStatus.passed,first.tests.status);
+        assertTrue(first.preInstall.attempted);assertTrue(first.tests.tests>0);
+        assertFalse(Files.exists(temp.resolve("module-a/target/surefire-reports")));
+        assertTrue(Files.exists(temp.resolve("module-b/target/surefire-reports/TEST-com.sample.b.CalculatorTest.xml")));
+        assertTrue(first.command.args.contains("-am"));assertEquals(temp.toRealPath().resolve("pom.xml").toString(),first.command.args.get(first.command.args.indexOf("-f")+1));
+        String log=Files.readString(Path.of(first.logPath));assertEquals(1,log.split("\\[coverage\\] cwd=",-1).length-1);assertTrue(log.contains("coverage.loop.scope="));
+        MavenRunResult next=runner.run(c,first.runId,options);assertEquals(0,next.exitCode,()->Fs.readStringQuiet(next.logPath));assertFalse(next.preInstall.attempted);assertEquals(first.tests.tests,next.tests.tests);
+        assertTrue(Files.exists(Path.of(next.runDirectory,"round-002-scope/test-scope.properties.ready")));
+        for(var entry:poms.entrySet())assertEquals(entry.getValue(),Files.readString(entry.getKey()));
+        try(var jar=new java.util.jar.JarFile(Path.of(first.runDirectory,"round-001-scope/reactor-scope.jar").toFile());var input=new java.io.DataInputStream(jar.getInputStream(jar.getJarEntry("com/coverageloop/maven/ScopeParticipant.class")))){
+            input.readInt();input.readUnsignedShort();assertEquals(52,input.readUnsignedShort(),"Target Maven extension must support Java 8");
+        }
+    }
     @Test void treeUsesLineWeightsAndDoesNotPresentSourceEstimatesAsMeasuredLines() throws Exception {
         ProjectConfig c=fixture();c.selectedModulePaths=List.of("module-a","module-b");
         CoverageModuleResult a=module("module-a","jacoco",10,0),b=module("module-b","jacoco",0,90);
         var tree=StatisticsTree.build(c,List.of(a,b));assertEquals(10,tree.coveredLines);assertEquals(100,tree.totalLines);assertEquals(10.0,tree.lineCoverage);
         b.source="source-fallback";tree=StatisticsTree.build(c,List.of(a,b));assertFalse(tree.measured);assertNull(tree.lineCoverage);
         var missing=tree.children.get(1);assertEquals(0,missing.totalLines);assertNull(missing.children.get(0).children.get(0).lineCoverage);
+    }
+    @Test void dependencyFailureIsNotAnUncoveredBaselineAndRecoveryCanEstablishOne() throws Exception {
+        ProjectConfig c=fixture();c.maven.preInstall=false;c.maven.extraArgs=List.of("-o");
+        Path pom=temp.resolve("module-a/pom.xml");String original=Files.readString(pom);
+        Files.writeString(pom,original.replace("</project>","<dependencies><dependency><groupId>com.coverageloop.missing</groupId><artifactId>missing-"+UUID.randomUUID()+"</artifactId><version>1.0.0</version></dependency></dependencies></project>"));
+        var paths=new MavenRunner.RunnerPaths();paths.resourcesPath=temp.toString();paths.developmentRoot=temp.toString();
+        var runner=new MavenRunner(paths,new MavenRunner.OutputSink(){public void output(MavenOutputEvent e){}public void progress(MavenProgressEvent e){}});
+        var options=new MavenRunner.RunOptions();options.scopeTests=true;options.continueOnTestFailure=true;
+        MavenRunResult failed=runner.run(c,null,options);
+        assertNotEquals(0,failed.exitCode);assertEquals(TestExecutionStatus.build_failed,failed.tests.status);assertEquals("dependency-resolution",failed.tests.failureKind);assertEquals(0,failed.tests.tests);
+        assertTrue(failed.tests.message.contains("覆盖率无效"));assertFalse(Files.exists(Path.of(failed.runDirectory,"baseline-coverage.json")));
+        String gate=Files.readString(Path.of(failed.runDirectory,"round-001-coverage-gate.txt"));assertTrue(gate.contains("COVERAGE_NOT_EVALUATED"));assertFalse(gate.contains("COVERAGE_GATE_FAILED"));
+        Files.writeString(pom,original);MavenRunResult recovered=runner.run(c,failed.runId,options);
+        assertEquals(0,recovered.exitCode,()->Fs.readStringQuiet(recovered.logPath));assertEquals(TestExecutionStatus.passed,recovered.tests.status);
+        assertTrue(Files.exists(Path.of(recovered.runDirectory,"baseline-coverage.json")));
     }
     @Test void defaultPackageSelectionIncludesOnlyDefaultPackage() {
         CoverageScope scope=new CoverageScope();scope.kind=ScopeKind.package_;scope.pattern="";scope.mode=ScopeMode.include;
@@ -104,7 +150,7 @@ class StatisticsIntegrationTest {
         assertEquals(0,result.exitCode,()->Fs.readStringQuiet(result.logPath));assertEquals(TestExecutionStatus.test_failed,result.tests.status);
         assertEquals(1,result.tests.failures);assertTrue(Files.exists(temp.resolve("module-b/target/surefire-reports/TEST-com.sample.b.CalculatorTest.xml")));
         assertEquals(List.of("module-c"),result.noTestModules);assertTrue(CoverageLoopRunner.canCollectCoverage(result));assertFalse(CoverageLoopRunner.hasVerifiedCoverage(result));
-        var states=result.moduleProgress.stream().filter(m->m.phase.equals("coverage")).toList();assertEquals(List.of("failed","success","skipped"),states.stream().map(m->m.status).toList());
+        var states=result.moduleProgress.stream().filter(m->m.phase.equals("coverage")&&!m.dependency).toList();assertEquals(List.of("failed","success","skipped"),states.stream().map(m->m.status).toList());
         var tree=StatisticsTree.build(c,result.coverage);assertNull(tree.lineCoverage);assertNotNull(tree.children.get(1).lineCoverage);assertNull(tree.children.get(2).lineCoverage);
         assertTrue(progress.stream().anyMatch(e->e.modules.stream().anyMatch(m->m.modulePath.equals("module-a")&&m.status.equals("running"))));
     }

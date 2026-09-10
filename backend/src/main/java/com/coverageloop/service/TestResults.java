@@ -216,6 +216,12 @@ public final class TestResults {
 
         TestExecutionStatus status = classifyStatus(options.exitCode, options.signal,
                 tests, failures, errors, options.logText);
+        String log=options.logText==null?"":options.logText.toLowerCase(java.util.Locale.ROOT);
+        boolean dependencyFailure=options.signal==null&&options.exitCode!=null&&options.exitCode!=0
+                && (log.contains("could not collect dependencies")||log.contains("could not resolve dependencies")
+                ||log.contains("failed to read artifact descriptor")||log.contains("non-resolvable parent pom")
+                ||log.contains("non-resolvable import pom"));
+        if(dependencyFailure)status=TestExecutionStatus.build_failed;
         boolean continuedAfterFailure = status == TestExecutionStatus.test_failed
                 && options.continueOnTestFailure
                 && options.exitCode != null && options.exitCode == 0;
@@ -242,6 +248,11 @@ public final class TestResults {
         result.modules = modules;
         result.reportArchivePath = freshArtifacts > 0 ? archiveRoot : null;
         result.message = statusMessage(status, noTestModules, continuedAfterFailure);
+        if(status==TestExecutionStatus.build_failed){
+            result.failureKind=dependencyFailure?"dependency-resolution":"build";
+            result.message=dependencyFailure?"依赖解析失败，本轮覆盖率无效；请检查根 reactor、父 POM 版本、仓库与 settings，详见本轮 maven.log"
+                    :"构建未完成，本轮覆盖率无效；请查看本轮 maven.log 和已归档测试报告";
+        }
         return result;
     }
 }

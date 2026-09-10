@@ -23,6 +23,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** 核心逻辑单元测试 */
 class CoreLogicTest {
 
+    @Test void dependencyFailureStopsBeforeAnAgentCanTreatUnmeasuredClassesAsMissingTests() throws Exception {
+        var config=new com.coverageloop.model.ProjectConfig();config.agent.enabled=true;config.selectedModulePaths=List.of("module-a");
+        var failure=new com.coverageloop.model.MavenRunResult();failure.round=1;failure.exitCode=1;
+        failure.tests.status=com.coverageloop.model.TestExecutionStatus.build_failed;failure.tests.failureKind="dependency-resolution";failure.tests.message="依赖解析失败，本轮覆盖率无效";
+        var sink=new com.coverageloop.service.MavenRunner.OutputSink(){public void output(com.coverageloop.model.MavenOutputEvent e){}public void progress(com.coverageloop.model.MavenProgressEvent e){}};
+        var maven=new com.coverageloop.service.MavenRunner(new com.coverageloop.service.MavenRunner.RunnerPaths(),sink){
+            @Override public com.coverageloop.model.MavenRunResult run(com.coverageloop.model.ProjectConfig c,String session,RunOptions options){return failure;}
+        };
+        var agent=new com.coverageloop.service.AgentRunner(sink){
+            @Override public com.coverageloop.model.AgentProbeResult probe(com.coverageloop.model.ProjectConfig c){var p=new com.coverageloop.model.AgentProbeResult();p.status=com.coverageloop.model.AgentExecutionStatus.passed;return p;}
+            @Override public com.coverageloop.model.AgentRoundResult runRound(com.coverageloop.model.ProjectConfig c,com.coverageloop.model.MavenRunResult r,String mode){throw new AssertionError("Dependency failure must not start agent edits");}
+        };
+        var result=new com.coverageloop.service.CoverageLoopRunner(maven,agent).run(config);
+        assertEquals(com.coverageloop.model.CoverageLoopStopReason.maven_failed,result.stopReason);assertEquals(1,result.rounds.size());assertTrue(result.agentRounds.isEmpty());assertTrue(result.message.contains("依赖解析失败"));
+    }
+
     @Test
     void scopeSelectionIncludeExclude() {
         List<CoverageScope> scopes = new ArrayList<>();

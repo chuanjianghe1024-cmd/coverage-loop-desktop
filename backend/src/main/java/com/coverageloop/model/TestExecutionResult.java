@@ -14,4 +14,6 @@ public class TestExecutionResult {
     public List<TestModuleResult> modules = new ArrayList<>();
     public String reportArchivePath;
     public String message;
+    /** Structured build diagnostics; absent in older saved runs. */
+    public String failureKind;
 }

@@ -15,7 +15,7 @@ export interface ClassResult { modulePath: string; className: string; qualifiedN
 export interface Round {
   runId: string; round: number; exitCode: number | null; runDirectory: string; logPath: string; coverageSnapshotPath: string;
   startedAt: string; finishedAt: string;
-  tests: { tests: number; failures: number; errors: number; skipped: number; status: string; message: string; duration?: number };
+  tests: { tests: number; failures: number; errors: number; skipped: number; status: string; message: string; duration?: number; failureKind?:string };
   coverage: { modulePath: string; source: string; classCount: number; coveredLines: number; missedLines: number; classes: ClassResult[] }[];
   moduleProgress?:ModuleProgress[]; noTestModules?:string[];
   groups: { initialSatisfied: ClassResult[]; pending: ClassResult[]; supplemented: ClassResult[] };

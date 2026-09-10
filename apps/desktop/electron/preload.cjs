@@ -4,5 +4,5 @@ contextBridge.exposeInMainWorld('coverage', {
   choosePath: kind => ipcRenderer.invoke('coverage:choose', kind),
   recoverSession: selector => ipcRenderer.invoke('coverage:recover', selector),
   openArtifact: path => ipcRenderer.invoke('coverage:artifact', path),
-  version: '1.2.1',
+  version: '1.2.2',
 });

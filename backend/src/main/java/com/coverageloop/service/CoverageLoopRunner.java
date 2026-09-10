@@ -52,7 +52,7 @@ public class CoverageLoopRunner {
                 return "自动循环已达到最大 " + maxRounds + " 轮，剩余 "
                         + (latest == null ? 0 : latest.groups.pending.size()) + " 个待补充类";
             case maven_failed:
-                return "自动循环停止：第 " + (latest == null ? 0 : latest.round) + " 轮 Maven 或测试失败";
+                return "自动循环停止：" + (latest == null ? "Maven 或测试失败" : latest.tests.message);
             case agent_unavailable:
                 return "自动循环未启动：Agent 探活未收到 OK";
             case agent_failed:
@@ -149,6 +149,7 @@ public class CoverageLoopRunner {
             if (stopRequested || latest.tests.status == TestExecutionStatus.aborted) {
                 stopReason = CoverageLoopStopReason.aborted;
             }
+            if(stopReason==null&&"dependency-resolution".equals(latest.tests.failureKind))stopReason=CoverageLoopStopReason.maven_failed;
             String promptMode = "coverage";
             if (stopReason == null && (latest.exitCode == null || latest.exitCode != 0
                     || latest.tests.status == TestExecutionStatus.test_failed)) {
