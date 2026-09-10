@@ -117,7 +117,9 @@ class MavenLoopIntegrationTest {
         ProjectConfig config = sampleConfig();
         MavenRunner runner = newRunner();
         MavenRunResult result = runner.run(config, null, new MavenRunner.RunOptions());
-        assertEquals(0, result.exitCode, "Maven 应成功退出");
+        assertEquals(0, result.exitCode, () -> "Maven should succeed. Command: "
+                + result.command.executable + " " + String.join(" ", result.command.args)
+                + "\n" + Fs.readStringQuiet(result.logPath));
         assertEquals(TestExecutionStatus.passed, result.tests.status);
         assertEquals(2, result.coverage.size());
         for (CoverageModuleResult module : result.coverage) {
@@ -234,7 +236,8 @@ class MavenLoopIntegrationTest {
 
         MavenRunner runner = newRunner();
         MavenRunResult result = runner.run(config, null, new MavenRunner.RunOptions());
-        assertEquals(0, result.exitCode, "单模块 Maven 应成功");
+        assertEquals(0, result.exitCode, () -> "Single-module Maven should succeed.\n"
+                + Fs.readStringQuiet(result.logPath));
         assertFalse(result.command.args.contains("-pl"), "单模块项目不应出现 -pl 参数");
         assertEquals(1, result.coverage.size());
         assertEquals(".", result.coverage.get(0).modulePath);
