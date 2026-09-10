@@ -34,6 +34,7 @@ for(const name of ['bento-grid','hover-border-gradient']) {
  if(hash!==pins[name])throw new Error('Upstream '+name+' changed. Review the new official source and update scripts/aceternity-lock.json before syncing.');
  let source=file.content;
  if(name==='hover-border-gradient') source=source.replace('useEffect, useRef','useEffect').replace('import { motion }','import { motion, useReducedMotion }').replace('  const [hovered,','  const reducedMotion = useReducedMotion();\n  const [hovered,').replace('if (!hovered) {','if (!hovered && !reducedMotion) {').replace('}, [hovered]);','}, [hovered, duration, clockwise, reducedMotion]);');
+ if(name==='hover-border-gradient') source=source.replace('clockwise?: boolean;', 'clockwise?: boolean;\n    disabled?: boolean;').replaceAll('#3275F8','#7cb986').replaceAll('hsl(0, 0%, 100%)','#91bc7b');
  const directory=path.join(desktop,'src/components/ui');mkdirSync(directory,{recursive:true});
  writeFileSync(path.join(directory,name+'.tsx'),`// Local Aceternity component. Downloaded by npm run ui:sync.\n${source}`);
  console.log('Synced Aceternity UI: '+name);

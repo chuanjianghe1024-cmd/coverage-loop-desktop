@@ -15,7 +15,7 @@ public final class ScopeSelection {
 
     public static boolean scopeMatchesClass(CoverageScope scope, String qualifiedName) {
         if (scope.kind == ScopeKind.package_) {
-            return qualifiedName.startsWith(scope.pattern + ".");
+            return scope.pattern.isEmpty() ? !qualifiedName.contains(".") : qualifiedName.startsWith(scope.pattern + ".");
         }
         return qualifiedName.equals(scope.pattern) || qualifiedName.startsWith(scope.pattern + "$");
     }

@@ -22,11 +22,10 @@ test('root + settings -> module/class rules -> editable prompts and batch -> sav
  await user.click(screen.getByRole('button',{name:'扫描工程并继续'}));
  expect(await screen.findByText('定义本次补测范围')).toBeInTheDocument();
  expect(screen.getByRole('checkbox',{name:'选择模块 module-a'})).toBeChecked();
- await user.click(screen.getByText('module-a',{selector:'span'}));
- await user.selectOptions(screen.getByLabelText('com.sample.a 范围规则'),'include');
- await user.click(screen.getByText('com.sample.a',{selector:'span'}));
+ expect(screen.queryByLabelText('测试匹配规则')).not.toBeInTheDocument();
+ await user.click(screen.getByRole('button',{name:'展开 com.sample.a'}));
  expect(screen.getByText('Greeter',{selector:'span'})).toBeInTheDocument();
- await user.selectOptions(screen.getByLabelText('com.sample.a.Greeter 范围规则'),'exclude');
+ await user.click(screen.getByRole('checkbox',{name:'选择类 com.sample.a.Other'}));
  await user.click(screen.getByRole('button',{name:'配置补测策略'}));
  await user.click(screen.getByRole('checkbox',{name:/启用自动补测/}));
  const batch=screen.getByLabelText('每批处理类数');await user.clear(batch);await user.type(batch,'5');
@@ -36,7 +35,8 @@ test('root + settings -> module/class rules -> editable prompts and batch -> sav
  const saved=bridge.request.mock.calls.find(c=>c[0]==='/config/save')?.[1].config as typeof config;
  expect(saved.maven.settingsPath).toBe('/company/settings.xml');
  expect(saved.agent.batchSize).toBe(5);expect(saved.agent.coveragePromptTemplate).toBe('优先验证边界条件');
- expect(saved.scopes).toEqual([{modulePath:'module-a',kind:'package',pattern:'com.sample.a',mode:'include'},{modulePath:'module-a',kind:'class',pattern:'com.sample.a.Greeter',mode:'exclude'}]);
+ expect(saved.maven.localRepository).toBe('D:/m2');
+ expect(saved.scopes).toEqual([{modulePath:'module-a',kind:'class',pattern:'com.sample.a.Greeter',mode:'include'}]);
  expect(screen.getByRole('button',{name:'开始补测'})).toBeEnabled();
 });
 test('scan errors remain visible without advancing',async()=>{

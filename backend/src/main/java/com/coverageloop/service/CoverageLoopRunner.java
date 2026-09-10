@@ -139,7 +139,7 @@ public class CoverageLoopRunner {
             return result;
         }
 
-        MavenRunResult latest = maven.run(config, null, new MavenRunner.RunOptions());
+        MavenRunResult latest = maven.run(config, null, scopedOptions());
         rounds.add(roundSummary(latest));
         onRound.accept(latest);
         String previousFailureSignature = "";
@@ -201,7 +201,7 @@ public class CoverageLoopRunner {
                 return result;
             }
 
-            latest = maven.run(config, latest.runId, new MavenRunner.RunOptions());
+            latest = maven.run(config, latest.runId, scopedOptions());
             rounds.add(roundSummary(latest));
         onRound.accept(latest);
         }
@@ -219,4 +219,8 @@ public class CoverageLoopRunner {
         boolean agentStopped = agent.stop();
         return mavenStopped || agentStopped || stopRequested;
     }
+    private static MavenRunner.RunOptions scopedOptions() {
+        MavenRunner.RunOptions options=new MavenRunner.RunOptions(); options.scopeTests=true; return options;
+    }
+
 }

@@ -27,6 +27,7 @@ public final class DesktopEngine implements AutoCloseable {
     private MavenRunResult latest;
     private CoverageLoopResult loopResult;
     private AgentProbeResult probe;
+    private StatisticsTree.Node statistics;
     private volatile MavenRunner maven;
     private volatile AgentRunner agent;
     private volatile CoverageLoopRunner loop;
@@ -39,6 +40,10 @@ public final class DesktopEngine implements AutoCloseable {
             case "/project/open" -> open(required(input, "rootPomPath"));
             case "/config/save" -> save(config(input));
             case "/config/load" -> store.config(required(input,"rootPomPath"), required(input,"id"));
+            case "/statistics/configs" -> store.statisticsConfigs(required(input,"rootPomPath"));
+            case "/statistics/save" -> saveStatistics(config(input));
+            case "/statistics/delete" -> deleteStatistics(required(input,"rootPomPath"),required(input,"id"));
+            case "/statistics/preview" -> ScopedTests.plan(config(input));
             case "/command/preview" -> runner().resolveMavenCommand(config(input), new MavenRunner.RunOptions());
             case "/run/start" -> start(config(input), required(input,"mode"));
             case "/run/stop" -> stop();
@@ -77,7 +82,7 @@ public final class DesktopEngine implements AutoCloseable {
         ProjectConfig config = saved.isEmpty() ? ConfigFactory.createDefaultConfig(project.rootPomPath) : saved.get(0);
         if (config.selectedModulePaths.isEmpty()) config.selectedModulePaths = project.modules.stream().filter(m -> m.hasMainSources).map(m -> m.relativePath).toList();
         status = "idle"; jobId = ""; mode = ""; message = "工作区已准备就绪";
-        latest = null; loopResult = null; probe = null; progress = null; startedAt = null; finishedAt = null;
+        latest = null; loopResult = null; probe = null; statistics=null; progress = null; startedAt = null; finishedAt = null;
         rounds.clear(); agentRounds.clear(); events.clear(); activeConfig = config;
         return Map.of("project", project, "sources", sources, "config", config, "configs", saved);
     }
@@ -85,6 +90,15 @@ public final class DesktopEngine implements AutoCloseable {
         requireIdle(); validate(config, false);
         store.saveConfig(config);
         return Map.of("configs", store.configs(config.rootPomPath));
+    }
+    private synchronized Object saveStatistics(ProjectConfig config) throws Exception {
+        requireIdle(); validate(config,false); config.agent.enabled=false; config.maven.testPattern="";
+        String path=store.saveStatisticsConfig(config);
+        return Map.of("configs",store.statisticsConfigs(config.rootPomPath),"path",path);
+    }
+    private synchronized Object deleteStatistics(String root,String id) throws Exception {
+        requireIdle(); store.deleteStatisticsConfig(root,id);
+        return store.statisticsConfigs(root);
     }
     static void validate(ProjectConfig c, boolean execution) {
         ProjectScanResult project = ProjectScanner.scanMavenProject(c.rootPomPath);
@@ -118,13 +132,14 @@ public final class DesktopEngine implements AutoCloseable {
     }
     private synchronized Object start(ProjectConfig config, String taskMode) throws Exception {
         requireIdle(); validate(config, true);
-        if (!List.of("baseline","loop","probe").contains(taskMode)) throw new IllegalArgumentException("无效任务类型");
+        if (!List.of("baseline","loop","probe","statistics").contains(taskMode)) throw new IllegalArgumentException("无效任务类型");
+        if (!taskMode.equals("probe") && ScopedTests.plan(config).stream().noneMatch(s -> s.sourceCount()>0)) throw new IllegalArgumentException("请在树中选择至少一个生产类");
         if (taskMode.equals("loop") && !config.agent.enabled) throw new IllegalArgumentException("请在 Agent 设置中启用自动补测");
-        cancelled.set(false); latest = null; loopResult = null; probe = null; progress = null;
+        cancelled.set(false); latest = null; loopResult = null; probe = null; statistics=null; progress = null;
         status = "running"; mode = taskMode; jobId = UUID.randomUUID().toString(); activeConfig = config.copy();
         startedAt = Instant.now().toString(); finishedAt = null; message = "正在启动任务";
         events.clear(); rounds.clear(); agentRounds.clear();
-        try { store.saveConfig(config); persist(); }
+        try { if (taskMode.equals("statistics")) store.saveStatisticsConfig(config); else store.saveConfig(config); persist(); }
         catch (Exception e) { status = "failed"; message = "无法保存任务，未启动执行"; throw e; }
         maven = runner(); agent = new AgentRunner(sink(), cancelled::get);
         loop = new CoverageLoopRunner(maven, agent, this::recordRound, result -> { synchronized (DesktopEngine.this) { agentRounds.add(result); try { persist(); } catch (Exception e) { throw new IllegalStateException("保存 Agent 轮次失败", e); } } });
@@ -135,8 +150,13 @@ public final class DesktopEngine implements AutoCloseable {
         try {
             if (cancelled.get()) throw new CancellationException();
             switch (taskMode) {
-                case "baseline" -> {
-                    MavenRunResult result = maven.run(config, null, new MavenRunner.RunOptions());
+                case "baseline", "statistics" -> {
+                    MavenRunner.RunOptions options=new MavenRunner.RunOptions(); options.scopeTests=true;
+                    MavenRunResult result = maven.run(config, null, options);
+                    if (taskMode.equals("statistics")) {
+                        synchronized(this) { statistics=StatisticsTree.build(config,result.coverage); }
+                        Fs.writeString(Path.of(result.runDirectory,"statistics-tree.json").toString(),Json.toJson(statistics)+"\n");
+                    }
                     recordRound(result);
                     synchronized (this) {
                         latest = result;
@@ -176,6 +196,8 @@ public final class DesktopEngine implements AutoCloseable {
         Map<String,Object> value = new LinkedHashMap<>();
         value.put("id",jobId); value.put("status",status); value.put("mode",mode); value.put("message",message);
         value.put("startedAt",startedAt); value.put("finishedAt",finishedAt); value.put("progress",progress);
+        value.put("statistics",statistics);
+        value.put("configId",activeConfig==null?null:activeConfig.id); value.put("configName",activeConfig==null?null:activeConfig.name);
         value.put("agentRounds",new ArrayList<>(agentRounds)); value.put("rounds",new ArrayList<>(rounds)); value.put("latest",latest); value.put("loop",loopResult); value.put("probe",probe); value.put("cursor",sequence);
         value.put("events", events.stream().filter(e -> e.id() > cursor).toList());
         value.put("truncated", !events.isEmpty() && cursor > 0 && cursor < events.getFirst().id() - 1);

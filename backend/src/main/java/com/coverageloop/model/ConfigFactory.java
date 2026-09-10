@@ -24,6 +24,7 @@ public final class ConfigFactory {
         config.maven.useBundledMaven = true;
         config.maven.preInstall = true;
         config.maven.parallelThreads = 1;
+        config.maven.localRepository = com.coverageloop.util.Proc.isWindows() ? "D:/m2" : "";
         config.coverage.jacocoVersion = "0.8.8";
         config.coverage.lineThreshold = 80;
         config.coverage.branchThreshold = 0;

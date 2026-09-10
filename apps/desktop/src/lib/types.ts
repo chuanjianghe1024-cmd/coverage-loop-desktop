@@ -22,7 +22,7 @@ export interface Round {
 export interface Progress { round: number; stage: string; percent: number; message: string }
 export interface LogEvent { id: number; type: string; data: { text?: string; stream?: string; timestamp?: string } }
 export interface Snapshot {
-  id: string; status: string; mode: string; message: string; startedAt?: string; finishedAt?: string; progress?: Progress;
+  id: string; status: string; mode: string; message: string; configId?: string; configName?: string; statistics?: StatisticsNode; startedAt?: string; finishedAt?: string; progress?: Progress;
   agentRounds?: { round: number; changedTestFiles: string[]; selectedClassCount: number; completionMarkerSeen: boolean }[];
   latest?: Round; rounds: Round[]; cursor: number; events: LogEvent[]; truncated?: boolean;
   loop?: { agentRounds: { round: number; changedTestFiles: string[]; selectedClassCount: number; completionMarkerSeen: boolean }[] };
@@ -31,3 +31,6 @@ export interface JobSummary { id: string; status: string; mode: string; message:
 export type PathKind = 'project' | 'settings' | 'jdk' | 'maven' | 'agent' | 'repository';
 export interface Bridge { request: <T>(route: string, payload?: unknown) => Promise<T>; choosePath: (kind: PathKind) => Promise<string | null>; openArtifact: (path: string) => Promise<void>; version: string }
 declare global { interface Window { coverage?: Bridge } }
+
+export interface StatisticsNode { id:string; name:string; kind:string; coveredLines:number; totalLines:number; classCount:number; lineCoverage:number|null; measured:boolean; children:StatisticsNode[] }
+export interface TestSelection {modulePath:string;sourceCount:number;packages:string[];tests:string[]}

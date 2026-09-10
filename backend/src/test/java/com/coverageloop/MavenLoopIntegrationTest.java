@@ -65,6 +65,7 @@ class MavenLoopIntegrationTest {
         config.name = "测试配置";
         config.selectedModulePaths = List.of("module-a", "module-b");
         config.maven.useBundledMaven = true;
+        config.maven.localRepository = "";
         config.maven.executable = System.getProperty("coverage.test.maven", "");
         config.maven.settingsPath = System.getProperty("coverage.test.settings", "");
         config.maven.preInstall = true;
@@ -228,6 +229,7 @@ class MavenLoopIntegrationTest {
         config.id = "single-test";
         config.selectedModulePaths = List.of(".");
         config.maven.useBundledMaven = true;
+        config.maven.localRepository = "";
         config.maven.executable = System.getProperty("coverage.test.maven", "");
         config.maven.settingsPath = System.getProperty("coverage.test.settings", "");
         config.maven.preInstall = false;

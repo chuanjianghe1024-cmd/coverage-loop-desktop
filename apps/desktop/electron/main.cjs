@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } = require('electron');
 const { spawn } = require('node:child_process');
 const { randomBytes } = require('node:crypto');
 const path = require('node:path');
@@ -43,6 +43,8 @@ async function request(route,payload,method='POST') {
 }
 function checkSender(event) { if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted frame'); }
 async function boot() {
+  nativeTheme.themeSource="light";
+  app.setAppUserModelId("com.coverageloop.desktop");
   await startEngine();
   ipcMain.handle('coverage:request',async (event,route,payload) => {
     checkSender(event); validateRoute(route);
@@ -58,7 +60,7 @@ async function boot() {
     return result.canceled ? null : result.filePaths[0];
   });
   ipcMain.handle('coverage:artifact',async (event,input) => { checkSender(event); const error = await shell.openPath(artifactPath([...roots],input)); if (error) throw new Error(error); });
-  window = new BrowserWindow({width:1440,height:960,minWidth:1080,minHeight:760,backgroundColor:'#090b0e',title:'Coverage Loop',autoHideMenuBar:true,webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  window = new BrowserWindow({width:1440,height:960,minWidth:1080,minHeight:760,backgroundColor:'#f4f9f4',title:'Coverage Loop',icon:path.join(__dirname,'../build/icon.ico'),titleBarStyle:'hidden',...(process.platform!=='darwin'?{titleBarOverlay:{color:'#e6f2e8',symbolColor:'#234d36',height:36}}:{}),autoHideMenuBar:true,webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   window.webContents.setWindowOpenHandler(() => ({action:'deny'}));
   window.webContents.on('will-navigate',event => event.preventDefault());
   window.on('close',async event => {

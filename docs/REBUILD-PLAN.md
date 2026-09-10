@@ -2,8 +2,8 @@
 
 ## 产品流程
 
-1. 选择项目根目录，按需选择 Maven `settings.xml`，点击下一步扫描。
-2. 展示全部 Reactor 模块及 Java 包/类树；勾选模块，对包和类设置 Include / Exclude。Exclude 优先；没有 Include 时包含该模块的所有类。设定目标行覆盖率和 Surefire 测试匹配规则。
+1. 选择项目根目录，按需选择 Maven `settings.xml`，确认本地仓库短路径（Windows 默认 `D:/m2`），点击下一步扫描。
+2. 展示全部 Reactor 模块及 Java 包/类树；直接勾选模块、包与类，取消即排除，无需手写匹配规则。兼容读取旧 Include / Exclude 配置。设定目标行覆盖率，测试清单从所选生产类所在包自动生成。
 3. 选择 Hermes / OpenCode，设置程序路径、Provider、模型、每批类数、最多验证轮数、重复失败熔断和超时；独立编辑补测与失败修复提示词。
 4. 保存配置进入看板，运行 Maven 基线或自动补测。看板展示真实轮次，支持停止、回看和打开执行证据。
 5. 项目、配置、任务与每轮快照存入 SQLite；原始 Maven / Agent 日志和提示词继续存为文件。
@@ -13,8 +13,8 @@
 | 层 | 选择 | 职责 |
 |---|---|---|
 | 桌面外壳 | Electron | 文件/目录选择、Java 生命周期、受限 IPC、Windows 安装包 |
-| 界面 | React + TypeScript + Vite | 三步向导、范围树、提示词编辑、逐轮看板、历史 |
-| UI | Aceternity UI + Tailwind CSS 4 + Motion + Lucide | Bento 指标卡、Hover Border Gradient 主操作、统一暗色界面 |
+| 界面 | React + TypeScript + Vite | 三步向导、范围树、提示词编辑、逐轮看板、独立统计、历史 |
+| UI | Aceternity UI + Tailwind CSS 4 + Motion + Lucide | Bento 指标卡、Hover Border Gradient 主操作、浅绿色主题、树展开/数字动效、统一标题栏 |
 | 执行内核 | Java 17 + JDK HttpServer | 工程扫描、任务状态机、Maven/Agent 子进程、JaCoCo/Surefire 解析 |
 | 数据库 | SQLite / sqlite-jdbc | 项目、配置、任务、不可变验证轮次 |
 | 构建验证 | Maven Wrapper + JUnit、Vitest、Node test | 真 Maven 样例、持久化、接口认证和界面交互 |
@@ -34,10 +34,11 @@
 |---|---|---|
 | projects | root_pom | 工程名称、最近打开时间 |
 | configurations | root_pom + id | 完整配置 JSON、提示词、更新时间 |
+| statistics_configurations | root_pom + id | 独立统计配置 JSON，同时写入工程配置文件 |
 | jobs | id | 工程、状态、开始时间、配置与任务汇总 |
 | rounds | job_id + round_number | 本轮测试结果、覆盖率、未达标类、日志路径 |
 
-SQLite 使用 WAL、外键与 busy timeout，所有写入通过同一个同步访问层。`PRAGMA user_version=1` 表示当前版本。首次启动导入已打开工程的旧 `.coverage-loop/configs/*.json` 配置，旧文件保留。重启时将未完成任务标记为 `interrupted`，保留已有轮次；重新运行必须生成新基线，不自动复用上次执行结果。
+SQLite 使用 WAL、外键与 busy timeout，所有写入通过同一个同步访问层。`PRAGMA user_version=2` 表示当前版本。首次启动导入已打开工程的旧 `.coverage-loop/configs/*.json` 配置，旧文件保留。重启时将未完成任务标记为 `interrupted`，保留已有轮次；重新运行必须生成新基线，不自动复用上次执行结果。
 
 ## 看板统计口径
 
@@ -51,8 +52,10 @@ SQLite 使用 WAL、外键与 busy timeout，所有写入通过同一个同步�
 
 ## 执行规则
 
-- 每轮从根 POM 执行选定模块及必要依赖；单模块工程不追加无效的 `-pl .`。
-- 基线与每轮验证前删除目标模块旧 `jacoco.exec` / XML，防止报告混用。
+- 预构建从根 POM install 所选模块及依赖（跳过测试）；正式测试逐个所选模块执行，不带 `-am`。单模块工程不追加无效的 `-pl .`。
+- 测试源文件按所选生产包筛选；整个模块被选中时使用该模块测试源文件。通过 Surefire includesFile / excludesFile 约束 POM 中已有的宽范围 includes；文件内排除补集防止未知或生成的测试越出选择范围。类名不拼接进命令行。
+- 扫描针对标准 `src/main/java` / `src/test/java`；自定义源码目录与跨包测试映射需要后续支持。
+- 基线与每轮验证前删除目标模块旧 `jacoco.exec` / JaCoCo XML / Surefire TEST XML，防止报告混用。
 - Maven 失败进入修复分支，成功后才能检查类级门禁。
 - 最大轮数包含第一轮基线。达到上限仍未达标时标记 `limited`，不会显示成功。
 - 同一失败连续达到阈值熔断。没有新鲜报告或没有命中目标类停止循环。
@@ -62,7 +65,7 @@ SQLite 使用 WAL、外键与 busy timeout，所有写入通过同一个同步�
 
 ## 已实现与后续边界
 
-本次交付范围是上述完整向导、真实执行、逐轮看板、SQLite 和 Windows 打包配置。保留旧核心的跨模块业务统计服务，但本次界面聚焦任务看板，没有提供业务分组编辑页面。
+本次交付范围是上述完整向导、真实执行、逐轮看板、独立多配置覆盖率统计、SQLite 和 Windows 打包配置。保留旧核心的跨模块业务统计服务，但本次界面聚焦任务看板，没有提供业务分组编辑页面。
 
 后续独立事项：分支覆盖率门禁、生产类到 DT 用例的准确映射、主动暂停/安全断点续跑、多个任务排队、强制文件写入隔离、增量代码差异查看、更多 Agent 适配器、安装包签名与自动更新。当前不把这些列为完成能力。
 

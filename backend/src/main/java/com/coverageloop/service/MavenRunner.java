@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -42,6 +43,7 @@ public class MavenRunner {
     public static class RunOptions {
         public boolean fullProject;
         public boolean continueOnTestFailure;
+        public boolean scopeTests;
     }
 
     private final java.util.function.BooleanSupplier cancelled;
@@ -160,13 +162,14 @@ public class MavenRunner {
         }
 
         List<String> args = new ArrayList<>(baseArgs);
+        if (options.scopeTests) args.remove("-am");
         if (!hasSystemProperty(config.maven.extraArgs, "failIfNoTests")) {
             args.add("-DfailIfNoTests=false");
         }
         if (!hasSystemProperty(config.maven.extraArgs, "surefire.failIfNoSpecifiedTests")) {
             args.add("-Dsurefire.failIfNoSpecifiedTests=false");
         }
-        if (config.maven.testPattern != null && !config.maven.testPattern.trim().isEmpty()
+        if (!options.scopeTests && config.maven.testPattern != null && !config.maven.testPattern.trim().isEmpty()
                 && !hasSystemProperty(config.maven.extraArgs, "test")) {
             args.add("-Dtest=" + config.maven.testPattern.trim());
         }
@@ -175,7 +178,8 @@ public class MavenRunner {
                 ? withoutSystemProperties(config.maven.extraArgs,
                         combine(executionProperties, List.of("maven.test.failure.ignore")))
                 : withoutSystemProperties(config.maven.extraArgs, executionProperties);
-        args.addAll(coverageExtraArgs);
+        args.addAll(options.scopeTests ? withoutSystemProperties(coverageExtraArgs,
+                List.of("test","surefire.includes","surefire.excludes","surefire.includesFile","surefire.excludesFile")) : coverageExtraArgs);
         if (options.continueOnTestFailure) args.add("-Dmaven.test.failure.ignore=true");
         args.add("-DskipTests=false");
         args.add("-Dmaven.test.skip=false");
@@ -257,13 +261,13 @@ public class MavenRunner {
                     phase[0] = "coverage";
                     output(prepared, "system", "覆盖率执行：" + command.executable + " " + String.join(" ", command.args) + "\n");
                     updateProgress(prepared, 35, MavenProgressStage.resolving, "预构建完成，开始测试与覆盖率执行");
-                    execution = execute(prepared, config, command, command.args,
+                    execution = executeCoverage(prepared, config, command, options,
                             lastProcessOutputAt, logBuffer, logWriterRef, phase);
                 }
             } else {
                 phase[0] = "coverage";
                 output(prepared, "system", "覆盖率执行：" + command.executable + " " + String.join(" ", command.args) + "\n");
-                execution = execute(prepared, config, command, command.args,
+                execution = executeCoverage(prepared, config, command, options,
                         lastProcessOutputAt, logBuffer, logWriterRef, phase);
             }
             output(prepared, "system", "Maven 已结束，退出码：" + execution.exitCode + "\n");
@@ -348,6 +352,26 @@ public class MavenRunner {
         String signal;
     }
 
+    private ProcessExecution executeCoverage(RunHistory.PreparedRound prepared, ProjectConfig config,
+            MavenCommandPreview command, RunOptions options, AtomicLong outputAt, StringBuilder buffer,
+            AtomicReference<LogWriter> writer, String[] phase) throws Exception {
+        if (!options.scopeTests) return execute(prepared,config,command,command.args,outputAt,buffer,writer,phase);
+        ProcessExecution combined=new ProcessExecution(); combined.exitCode=0;
+        int index=0;
+        for (ScopedTests.Selection selection:ScopedTests.plan(config)) {
+            ProjectConfig one=config.copy(); one.selectedModulePaths=List.of(selection.modulePath());
+            MavenCommandPreview moduleCommand=resolveMavenCommand(one,options);
+            List<String> arguments=new ArrayList<>(moduleCommand.args);
+            arguments.addAll(ScopedTests.writeFilters(selection,java.nio.file.Path.of(prepared.runDirectory),++index));
+            output(prepared,"system","范围测试："+selection.modulePath()+"，生产类 "+selection.sourceCount()
+                    +"，测试文件 "+selection.tests().size()+"；清单已写入本轮目录\n");
+            ProcessExecution result=execute(prepared,one,moduleCommand,arguments,outputAt,buffer,writer,phase);
+            if (!Objects.equals(result.exitCode,0)) combined.exitCode=result.exitCode;
+            if (result.signal!=null) combined.signal=result.signal;
+        }
+        return combined;
+    }
+
     private ProcessExecution execute(RunHistory.PreparedRound prepared, ProjectConfig config, MavenCommandPreview command,
                                      List<String> args, AtomicLong lastProcessOutputAt, StringBuilder logBuffer,
                                      AtomicReference<LogWriter> logWriterRef, String[] phase) throws Exception {
@@ -364,6 +388,12 @@ public class MavenRunner {
                 java.nio.file.Path target = java.nio.file.Path.of(command.workingDirectory, module, "target");
                 java.nio.file.Files.deleteIfExists(target.resolve("jacoco.exec"));
                 java.nio.file.Files.deleteIfExists(target.resolve("site/jacoco/jacoco.xml"));
+                java.nio.file.Path reports = target.resolve("surefire-reports");
+                if (java.nio.file.Files.isDirectory(reports)) {
+                    try (var files = java.nio.file.Files.newDirectoryStream(reports, "TEST-*.xml")) {
+                        for (var report : files) java.nio.file.Files.deleteIfExists(report);
+                    }
+                }
             }
         }
         Process process = builder.start();

@@ -25,7 +25,8 @@ public final class WorkspaceStore implements AutoCloseable {
                 s.execute("CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, root_pom TEXT NOT NULL, status TEXT NOT NULL, started_at TEXT NOT NULL, content TEXT NOT NULL)");
                 s.execute("CREATE INDEX IF NOT EXISTS jobs_project_time ON jobs(root_pom,started_at DESC)");
                 s.execute("CREATE TABLE IF NOT EXISTS rounds(job_id TEXT NOT NULL REFERENCES jobs(id), round_number INTEGER NOT NULL, content TEXT NOT NULL, PRIMARY KEY(job_id,round_number))");
-                s.execute("PRAGMA user_version=1");
+                s.execute("CREATE TABLE IF NOT EXISTS statistics_configurations(root_pom TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL, content TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(root_pom,id))");
+                s.execute("PRAGMA user_version=2");
             }
             for (JsonObject job : rows("SELECT content FROM jobs WHERE status IN ('running','stopping')")) {
                 job.addProperty("status","interrupted"); job.addProperty("message","上次应用退出时任务未完成；请检查代码后重新运行基线"); job.addProperty("finishedAt",Instant.now().toString());
@@ -69,6 +70,28 @@ public final class WorkspaceStore implements AutoCloseable {
     }
     public synchronized ProjectConfig config(String root,String id) throws SQLException {
         return configs(root).stream().filter(c -> c.id.equals(id)).findFirst().orElseThrow(() -> new IllegalArgumentException("未找到配置"));
+    }
+    public static Path statisticsConfigPath(ProjectConfig c) {
+        if (c.id==null || !c.id.matches("[A-Za-z0-9_-]{1,80}")) throw new IllegalArgumentException("统计配置 ID 无效");
+        return Path.of(c.rootPomPath).toAbsolutePath().getParent().resolve(".coverage-loop/statistics/configs").resolve(c.id+".json");
+    }
+    public synchronized String saveStatisticsConfig(ProjectConfig c) throws Exception {
+        c.updatedAt=Instant.now().toString();
+        Path file=statisticsConfigPath(c);
+        Files.createDirectories(file.getParent());
+        Files.writeString(file,Json.toJson(c)+"\n");
+        update("INSERT INTO statistics_configurations VALUES(?,?,?,?,?) ON CONFLICT(root_pom,id) DO UPDATE SET name=excluded.name,content=excluded.content,updated_at=excluded.updated_at",c.rootPomPath,c.id,c.name,Json.toCompactJson(c),c.updatedAt);
+        return file.toString();
+    }
+    public synchronized List<ProjectConfig> statisticsConfigs(String root) throws SQLException {
+        List<ProjectConfig> result=new ArrayList<>();
+        for(JsonObject row:rows("SELECT content FROM statistics_configurations WHERE root_pom=? ORDER BY updated_at DESC",root)) result.add(ConfigStore.parseConfig(row.toString(),root));
+        return result;
+    }
+    public synchronized void deleteStatisticsConfig(String root,String id) throws Exception {
+        ProjectConfig c=statisticsConfigs(root).stream().filter(v -> id.equals(v.id)).findFirst().orElseThrow(() -> new IllegalArgumentException("未找到统计配置"));
+        Files.deleteIfExists(statisticsConfigPath(c));
+        update("DELETE FROM statistics_configurations WHERE root_pom=? AND id=?",root,id);
     }
     public synchronized void saveJob(Map<String,Object> snapshot,ProjectConfig c) throws SQLException {
         Map<String,Object> value=new LinkedHashMap<>(snapshot); value.remove("events"); value.put("project",c.rootPomPath); value.put("name",c.name); value.put("config",c);
