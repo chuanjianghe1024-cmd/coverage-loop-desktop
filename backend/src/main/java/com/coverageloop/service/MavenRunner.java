@@ -87,7 +87,15 @@ public class MavenRunner {
     }
 
     public MavenCommandPreview resolveMavenCommand(ProjectConfig config, RunOptions options) {
-        String rootDirectory = new File(config.rootPomPath).getAbsoluteFile().getParent();
+        String rootPomPath;
+        try {
+            // Maven compares reactor paths by File.equals. Resolve Windows 8.3 aliases
+            // (and symlinks) before supplying both -f and the process working directory.
+            rootPomPath = java.nio.file.Path.of(config.rootPomPath).toRealPath().toString();
+        } catch (IOException error) {
+            throw new IllegalArgumentException("无法解析工程 pom.xml：" + config.rootPomPath, error);
+        }
+        String rootDirectory = new File(rootPomPath).getParent();
         String packagedMaven = new File(new File(paths.resourcesPath, "toolchain/maven"), "bin/" + executableName("mvn")).getPath();
         String developmentMaven = new File(new File(paths.developmentRoot, "resources/toolchain/maven"), "bin/" + executableName("mvn")).getPath();
         String bundledMaven = Fs.exists(packagedMaven) ? packagedMaven : developmentMaven;
@@ -124,7 +132,7 @@ public class MavenRunner {
         List<String> baseArgs = new ArrayList<>();
         baseArgs.add("--no-transfer-progress");
         baseArgs.add("-f");
-        baseArgs.add(config.rootPomPath);
+        baseArgs.add(rootPomPath);
         if (config.maven.parallelThreads > 1 && !hasThreadOption(config.maven.extraArgs)) {
             baseArgs.add(0, "-T");
             baseArgs.add(1, String.valueOf(config.maven.parallelThreads));
