@@ -21,3 +21,19 @@ Thumbs.db
 
 # 运行产物（测试样例项目在 target/test-classes 下生成）
 *.log
+
+# Desktop build and local configuration
+node_modules/
+dist/
+release/
+resources/runtime/
+.env
+.env.*
+!.env.example
+.coverage-loop/
+playwright-report/
+test-results/
+
+# Aceternity components are downloaded from the licensed upstream registry.
+apps/desktop/src/components/ui/bento-grid.tsx
+apps/desktop/src/components/ui/hover-border-gradient.tsx
