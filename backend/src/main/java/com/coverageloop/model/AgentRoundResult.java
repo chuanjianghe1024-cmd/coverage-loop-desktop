@@ -8,6 +8,8 @@ public class AgentRoundResult {
     public AgentExecutionStatus status;
     /** "coverage" | "repair" */
     public String mode;
+    public String sessionId;
+    public String provider;
     public int round;
     public Integer exitCode;
     public String signal;

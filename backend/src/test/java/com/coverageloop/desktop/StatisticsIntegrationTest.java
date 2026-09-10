@@ -87,6 +87,32 @@ class StatisticsIntegrationTest {
         for(String excluded:List.of("demo/AlphaTest2.class","demo/Alph.class","demo/GeneratedTest.class","elsewhere/AlphaTest.class","RootTests.class","Root.class","demo\\AlphaTest2.class","demo\\GeneratedTest.class","elsewhere\\AlphaTest.class"))
             assertTrue(regex.matcher(excluded).matches(),excluded);
     }
+    @Test void failedSelectedTestsDoNotPreventOtherModulesAndNoTestsStayUnmeasured() throws Exception {
+        ProjectConfig c=fixture();c.selectedModulePaths=List.of("module-a","module-b","module-c");
+        Path root=temp.resolve("pom.xml");Files.writeString(root,Files.readString(root).replace("</modules>","<module>module-c</module></modules>"));
+        Fs.writeString(temp.resolve("module-c/pom.xml").toString(),Files.readString(temp.resolve("module-b/pom.xml")).replace("module-b","module-c"));
+        Fs.writeString(temp.resolve("module-c/src/main/java/demo/Empty.java").toString(),"package demo; public class Empty { public int value(){return 42;} }");
+        Fs.writeString(temp.resolve("module-a/src/test/java/com/sample/a/SelectedFailureTest.java").toString(),"package com.sample.a; class SelectedFailureTest { @org.junit.jupiter.api.Test void fails(){throw new AssertionError(\"selected test failed\");} }");
+        MavenRunner.RunnerPaths paths=new MavenRunner.RunnerPaths();paths.resourcesPath=temp.toString();paths.developmentRoot=temp.toString();
+        List<MavenProgressEvent> progress=new ArrayList<>();
+        MavenRunner runner=new MavenRunner(paths,new MavenRunner.OutputSink(){public void output(MavenOutputEvent e){}public synchronized void progress(MavenProgressEvent e){progress.add(e);}});
+        MavenRunner.RunOptions options=new MavenRunner.RunOptions();options.scopeTests=true;options.continueOnTestFailure=true;
+        MavenRunResult result=runner.run(c,null,options);
+        assertEquals(0,result.exitCode,()->Fs.readStringQuiet(result.logPath));assertEquals(TestExecutionStatus.test_failed,result.tests.status);
+        assertEquals(1,result.tests.failures);assertTrue(Files.exists(temp.resolve("module-b/target/surefire-reports/TEST-com.sample.b.CalculatorTest.xml")));
+        assertEquals(List.of("module-c"),result.noTestModules);assertTrue(CoverageLoopRunner.canCollectCoverage(result));assertFalse(CoverageLoopRunner.hasVerifiedCoverage(result));
+        var states=result.moduleProgress.stream().filter(m->m.phase.equals("coverage")).toList();assertEquals(List.of("failed","success","skipped"),states.stream().map(m->m.status).toList());
+        var tree=StatisticsTree.build(c,result.coverage);assertNull(tree.lineCoverage);assertNotNull(tree.children.get(1).lineCoverage);assertNull(tree.children.get(2).lineCoverage);
+        assertTrue(progress.stream().anyMatch(e->e.modules.stream().anyMatch(m->m.modulePath.equals("module-a")&&m.status.equals("running"))));
+    }
+    @Test void packageWithOwnClassesContainsItsSubpackagesAndSumsEachLineOnce() throws Exception {
+        ProjectConfig c=fixture();CoverageModuleResult m=module("module-a","jacoco",2,3);m.classes=new ArrayList<>(m.classes);
+        CoverageClassResult a=m.classes.get(0);a.packageName="api";a.qualifiedName="api.A";a.className="A";
+        for(String pkg:List.of("api.conf","api.dep")){CoverageClassResult leaf=new CoverageClassResult();leaf.packageName=pkg;leaf.qualifiedName=pkg+".B";leaf.className="B";leaf.coveredLines=1;leaf.missedLines=4;m.classes.add(leaf);}
+        var root=StatisticsTree.build(c,List.of(m));var api=root.children.get(0).children.get(0);
+        assertEquals("api",api.name);assertEquals(3,api.children.size());assertEquals(4,api.coveredLines);assertEquals(15,api.totalLines);assertEquals(3,root.classCount);
+        assertEquals(List.of("conf","dep"),api.children.stream().filter(n->n.kind.equals("package")).map(n->n.name).toList());
+    }
     private static CoverageModuleResult module(String name,String source,int covered,int missed) {
         CoverageModuleResult m=new CoverageModuleResult();m.modulePath=name;m.source=source;
         CoverageClassResult c=new CoverageClassResult();c.modulePath=name;c.packageName="demo";c.className="Example";c.qualifiedName="demo.Example";c.coveredLines=covered;c.missedLines=missed;

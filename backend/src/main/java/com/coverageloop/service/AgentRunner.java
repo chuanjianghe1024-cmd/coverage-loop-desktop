@@ -108,7 +108,7 @@ public class AgentRunner {
         args.add("run");
         if ("work".equals(mode) && options.autoApprove) args.add("--auto");
         args.add("--format");
-        args.add("default");
+        args.add("work".equals(mode)?"json":"default");
         if (workingDirectory != null && !workingDirectory.isEmpty()) {
             args.add("--dir");
             args.add(workingDirectory);
@@ -363,7 +363,7 @@ public class AgentRunner {
         log.append("[").append(Instant.now()).append("] [PROCESS_STARTED] pid=").append(pid).append("\n");
 
         Thread stdoutThread = pump(process.getInputStream(), chunk -> {
-            String text = new String(chunk, StandardCharsets.UTF_8);
+            String text = chunk;
             lastOutputAtMs.set(System.currentTimeMillis());
             synchronized (stdout) {
                 String tail = stdout.append(text).toString();
@@ -374,7 +374,7 @@ public class AgentRunner {
             emit(runId, round, "stdout", "[Agent] " + text);
         });
         Thread stderrThread = pump(process.getErrorStream(), chunk -> {
-            String text = new String(chunk, StandardCharsets.UTF_8);
+            String text = chunk;
             lastOutputAtMs.set(System.currentTimeMillis());
             synchronized (stderr) {
                 String tail = stderr.append(text).toString();
@@ -468,13 +468,13 @@ public class AgentRunner {
         }
     }
 
-    private Thread pump(java.io.InputStream stream, java.util.function.Consumer<byte[]> consumer) {
+    private Thread pump(java.io.InputStream stream, java.util.function.Consumer<String> consumer) {
         Thread thread = new Thread(() -> {
-            byte[] buffer = new byte[8192];
-            try {
+            char[] buffer = new char[8192];
+            try (var reader = new java.io.InputStreamReader(stream, StandardCharsets.UTF_8)) {
                 int read;
-                while ((read = stream.read(buffer)) != -1) {
-                    if (read > 0) consumer.accept(java.util.Arrays.copyOf(buffer, read));
+                while ((read = reader.read(buffer)) != -1) {
+                    if (read > 0) consumer.accept(new String(buffer, 0, read));
                 }
             } catch (IOException error) {
                 // 进程退出后流关闭，正常结束
@@ -555,7 +555,7 @@ public class AgentRunner {
                 result.runId, result.round, mode);
         Map<String, TestFileState> after = snapshotTestFiles(config);
         List<String> changedTestFiles = writeChangedTests(before, after, changedTestsPath);
-        boolean completionMarkerSeen = hasBatchCompleteMarker(execution.stdout + "\n" + execution.stderr);
+        boolean completionMarkerSeen = hasBatchCompleteMarker(AgentSessions.readable(execution.stdout + "\n" + execution.stderr));
         Fs.appendString(logPath, "[" + Instant.now() + "] completion-marker="
                 + (completionMarkerSeen ? "BATCH_COMPLETE" : "missing")
                 + " changed-test-files=" + changedTestFiles.size() + "\n");
@@ -578,6 +578,7 @@ public class AgentRunner {
         round.selectedClassCount = built.selectedClassCount;
         round.startedAt = execution.startedAt;
         round.finishedAt = execution.finishedAt;
+        AgentSessions.persist(result,round,config,execution.stdout+"\n"+execution.stderr);
         return round;
     }
 

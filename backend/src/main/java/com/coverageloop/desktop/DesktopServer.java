@@ -40,7 +40,7 @@ public final class DesktopServer implements AutoCloseable {
             }
             String path = exchange.getRequestURI().getPath();
             if ("/health".equals(path) && "GET".equals(exchange.getRequestMethod())) {
-                reply(exchange, 200, Map.of("version", "1.1.0", "java", System.getProperty("java.version"))); return;
+                reply(exchange, 200, Map.of("version", "1.2.0", "java", System.getProperty("java.version"))); return;
             }
             if (!"POST".equals(exchange.getRequestMethod())) { reply(exchange, 405, Map.of("error", "POST required")); return; }
             byte[] bytes = exchange.getRequestBody().readNBytes(1_048_577);

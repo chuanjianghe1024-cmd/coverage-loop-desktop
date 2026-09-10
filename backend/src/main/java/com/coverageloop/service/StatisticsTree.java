@@ -38,7 +38,7 @@ public final class StatisticsTree {
             Set<String> seen=new HashSet<>();
             for (CoverageClassResult c:m.classes) {
                 if (!seen.add(c.qualifiedName)) continue;
-                Node pkg=packages.computeIfAbsent(c.packageName,p -> new Node(module.id+":"+p,p.isEmpty()?"(默认包)":p,"package"));
+                Node pkg=packageNode(module,packages,c.packageName);
                 Node leaf=new Node(module.id+":"+c.qualifiedName,c.className,"class");
                 leaf.measured=module.measured; leaf.classCount=1;
                 // Source fallback counters are estimates, not executable JaCoCo lines.
@@ -46,7 +46,7 @@ public final class StatisticsTree {
                 leaf.lineCoverage=leaf.measured&&leaf.totalLines>0?leaf.coveredLines*100.0/leaf.totalLines:null;
                 pkg.children.add(leaf);
             }
-            for (Node pkg:packages.values()) { pkg.aggregate(); module.children.add(pkg); }
+            module.children=new ArrayList<>(module.children.stream().map(StatisticsTree::compactPackage).toList());
         }
         for (var entry:modules.entrySet()) {
             String parent=modules.keySet().stream().filter(p -> !p.equals(entry.getKey())&&entry.getKey().startsWith(p+"/"))
@@ -55,6 +55,20 @@ public final class StatisticsTree {
         }
         aggregate(root);
         return root;
+    }
+    private static Node packageNode(Node module,Map<String,Node> packages,String path) {
+        if(packages.containsKey(path)) return packages.get(path);
+        int dot=path.lastIndexOf('.');
+        Node parent=dot<0?module:packageNode(module,packages,path.substring(0,dot));
+        Node node=new Node(module.id+":"+path,path.isEmpty()?"(默认包)":path.substring(dot+1),"package");
+        packages.put(path,node);parent.children.add(node);return node;
+    }
+    private static Node compactPackage(Node node) {
+        node.children=node.children.stream().map(c -> c.kind.equals("package")?compactPackage(c):c).toList();
+        if(node.kind.equals("package")&&node.children.size()==1&&node.children.get(0).kind.equals("package")) {
+            Node child=node.children.get(0);child.name=node.name+"."+child.name;return child;
+        }
+        return node;
     }
     private static void aggregate(Node node) { for(Node child:node.children) if(!child.kind.equals("class")) aggregate(child); node.aggregate(); }
 }

@@ -1,6 +1,6 @@
 const path = require('node:path');
 const fs = require('node:fs');
-const routes = new Set(['/statistics/configs','/statistics/save','/statistics/delete','/statistics/preview','/projects','/project/open','/config/save','/config/load','/command/preview','/run/start','/run/stop','/state','/history','/history/detail']);
+const routes = new Set(['/round/records','/round/file','/statistics/configs','/statistics/save','/statistics/delete','/statistics/preview','/projects','/project/open','/config/save','/config/load','/command/preview','/run/start','/run/stop','/state','/history','/history/detail']);
 function validateRoute(route) { if (typeof route !== 'string' || !routes.has(route)) throw new Error('Unknown desktop operation'); return route; }
 function isInside(root, target) { const relative = path.relative(root, target); return relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative)); }
 function artifactPath(roots, input) {

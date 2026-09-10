@@ -7,6 +7,8 @@ import java.util.List;
 public class MavenRunResult {
     public Integer exitCode;
     public String signal;
+    public java.util.List<com.coverageloop.service.BuildProgress.ModuleState> moduleProgress = java.util.List.of();
+    public java.util.List<String> noTestModules = java.util.List.of();
     public MavenCommandPreview command;
     public PreInstall preInstall = new PreInstall();
     public String runId;

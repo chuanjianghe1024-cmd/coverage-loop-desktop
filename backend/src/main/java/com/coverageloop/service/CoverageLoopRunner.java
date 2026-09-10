@@ -166,8 +166,8 @@ public class CoverageLoopRunner {
             } else if (stopReason == null) {
                 previousFailureSignature = "";
                 sameFailureCount = 0;
-                if (!hasVerifiedCoverage(latest)) stopReason = CoverageLoopStopReason.invalid_report;
-                else if (latest.groups.pending.isEmpty()) stopReason = CoverageLoopStopReason.target_reached;
+                if (!canCollectCoverage(latest)) stopReason = CoverageLoopStopReason.invalid_report;
+                else if (hasVerifiedCoverage(latest) && latest.groups.pending.isEmpty()) stopReason = CoverageLoopStopReason.target_reached;
             }
             if (stopReason == null && latest.round >= config.agent.maxRounds) {
                 stopReason = CoverageLoopStopReason.max_rounds;
@@ -207,6 +207,12 @@ public class CoverageLoopRunner {
         }
     }
 
+    public static boolean canCollectCoverage(MavenRunResult result) {
+        return result!=null&&!result.coverage.isEmpty()
+                &&result.coverage.stream().mapToInt(m->m.classCount).sum()>0
+                &&result.coverage.stream().allMatch(m -> "jacoco".equals(m.source)||result.noTestModules.contains(m.modulePath));
+    }
+
     public static boolean hasVerifiedCoverage(MavenRunResult result) {
         return result != null && !result.coverage.isEmpty()
                 && result.coverage.stream().allMatch(m -> "jacoco".equals(m.source))
@@ -220,7 +226,7 @@ public class CoverageLoopRunner {
         return mavenStopped || agentStopped || stopRequested;
     }
     private static MavenRunner.RunOptions scopedOptions() {
-        MavenRunner.RunOptions options=new MavenRunner.RunOptions(); options.scopeTests=true; return options;
+        MavenRunner.RunOptions options=new MavenRunner.RunOptions(); options.scopeTests=true; options.continueOnTestFailure=true; return options;
     }
 
 }

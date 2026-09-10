@@ -4,7 +4,8 @@ const { randomBytes } = require('node:crypto');
 const path = require('node:path');
 const fs = require('node:fs');
 const { validateRoute, artifactPath } = require('./policy.cjs');
-let window, engine, base, token, quitting = false;
+const { terminalCommand } = require('./recovery.cjs');
+let window, engine, base, token, recoveryTerminal, quitting = false;
 const roots = new Set();
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
@@ -48,6 +49,7 @@ async function boot() {
   await startEngine();
   ipcMain.handle('coverage:request',async (event,route,payload) => {
     checkSender(event); validateRoute(route);
+    if (route === '/run/start' && recoveryTerminal) throw new Error('请先关闭正在恢复会话的终端，再启动新的任务');
     const result = await request(route,payload);
     if (route === '/project/open') roots.add(fs.realpathSync(result.project.rootDirectory));
     return result;
@@ -58,6 +60,21 @@ async function boot() {
     if (!['project','settings','jdk','maven','agent','repository'].includes(kind)) throw new Error('Invalid picker');
     const result = await dialog.showOpenDialog(window,{title: directory ? '选择目录' : '选择文件',properties:[directory ? 'openDirectory' : 'openFile'],...(['settings'].includes(kind) ? {filters:[{name:'Maven settings',extensions:['xml']}]} : {})});
     return result.canceled ? null : result.filePaths[0];
+  });
+  ipcMain.handle('coverage:recover',async (event,selector) => {
+    checkSender(event);
+    if (recoveryTerminal) throw new Error('恢复终端已经打开');
+    recoveryTerminal = 'opening';
+    try {
+    const descriptor = await request('/round/recovery',selector);
+    const command = terminalCommand(descriptor,[...roots]);
+    const child = spawn(command.executable,command.args,{cwd:command.cwd,windowsHide:false,detached:true,stdio:'ignore'});
+    recoveryTerminal = child;
+    child.once('exit',()=>{if(recoveryTerminal===child)recoveryTerminal=null;});
+    await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',e=>{recoveryTerminal=null;reject(new Error('无法打开恢复终端：'+e.message));});});
+    child.unref();
+    return {sessionId:descriptor.sessionId};
+    } catch(error) { recoveryTerminal = null; throw error; }
   });
   ipcMain.handle('coverage:artifact',async (event,input) => { checkSender(event); const error = await shell.openPath(artifactPath([...roots],input)); if (error) throw new Error(error); });
   window = new BrowserWindow({width:1440,height:960,minWidth:1080,minHeight:760,backgroundColor:'#f4f9f4',title:'Coverage Loop',icon:path.join(__dirname,'../build/icon.ico'),titleBarStyle:'hidden',...(process.platform!=='darwin'?{titleBarOverlay:{color:'#e6f2e8',symbolColor:'#234d36',height:36}}:{}),autoHideMenuBar:true,webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});

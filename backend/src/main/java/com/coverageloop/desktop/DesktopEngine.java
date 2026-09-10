@@ -48,11 +48,15 @@ public final class DesktopEngine implements AutoCloseable {
             case "/run/start" -> start(config(input), required(input,"mode"));
             case "/run/stop" -> stop();
             case "/state" -> snapshot(input.has("cursor") ? input.get("cursor").getAsLong() : 0);
+            case "/round/records" -> new RoundRecords(store).list(input);
+            case "/round/file" -> new RoundRecords(store).read(input);
+            case "/round/recovery" -> recover(input);
             case "/history" -> store.history(required(input,"rootPomPath"));
             case "/history/detail" -> store.detail(required(input,"rootPomPath"), required(input,"id"));
             default -> throw new IllegalArgumentException("Unknown operation");
         };
     }
+    private synchronized Object recover(JsonObject input) throws Exception { requireIdle(); return new RoundRecords(store).recovery(input); }
     private static String required(JsonObject obj, String key) {
         if (!obj.has(key) || obj.get(key).isJsonNull() || obj.get(key).getAsString().isBlank()) throw new IllegalArgumentException("缺少参数：" + key);
         return obj.get(key).getAsString();
@@ -123,7 +127,7 @@ public final class DesktopEngine implements AutoCloseable {
     private MavenRunner.OutputSink sink() {
         return new MavenRunner.OutputSink() {
             public void output(MavenOutputEvent event) { emit("log", event); }
-            public void progress(MavenProgressEvent event) { synchronized (DesktopEngine.this) { progress = event; } emit("progress", event); }
+            public void progress(MavenProgressEvent event) { synchronized (DesktopEngine.this) { if((event.stage==MavenProgressStage.agent_running||event.stage==MavenProgressStage.agent_probing)&&progress!=null)event.modules=progress.modules; progress = event; } }
         };
     }
     private synchronized void emit(String type, Object data) {
@@ -151,7 +155,7 @@ public final class DesktopEngine implements AutoCloseable {
             if (cancelled.get()) throw new CancellationException();
             switch (taskMode) {
                 case "baseline", "statistics" -> {
-                    MavenRunner.RunOptions options=new MavenRunner.RunOptions(); options.scopeTests=true;
+                    MavenRunner.RunOptions options=new MavenRunner.RunOptions(); options.scopeTests=true; options.continueOnTestFailure=true;
                     MavenRunResult result = maven.run(config, null, options);
                     if (taskMode.equals("statistics")) {
                         synchronized(this) { statistics=StatisticsTree.build(config,result.coverage); }
@@ -160,7 +164,7 @@ public final class DesktopEngine implements AutoCloseable {
                     recordRound(result);
                     synchronized (this) {
                         latest = result;
-                        boolean valid = CoverageLoopRunner.hasVerifiedCoverage(result);
+                        boolean valid = CoverageLoopRunner.canCollectCoverage(result);
                         status = Objects.equals(result.exitCode, 0) && result.tests.status != TestExecutionStatus.test_failed && valid ? "completed" : "failed";
                         message = valid ? result.tests.message : "缺少本轮有效 JaCoCo 报告或范围未匹配到类，请检查日志";
                     }

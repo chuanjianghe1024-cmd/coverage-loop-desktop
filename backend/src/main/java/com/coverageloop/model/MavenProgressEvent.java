@@ -8,4 +8,6 @@ public class MavenProgressEvent {
     public int percent;
     public String message;
     public String timestamp;
+    public boolean indeterminate;
+    public java.util.List<com.coverageloop.service.BuildProgress.ModuleState> modules = java.util.List.of();
 }

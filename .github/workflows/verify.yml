@@ -37,6 +37,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: npm run test:desktop
       - run: npm run test:backend
       - run: npm run package:win
       - uses: actions/upload-artifact@v4

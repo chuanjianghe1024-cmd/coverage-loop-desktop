@@ -17,9 +17,15 @@ export interface Round {
   startedAt: string; finishedAt: string;
   tests: { tests: number; failures: number; errors: number; skipped: number; status: string; message: string; duration?: number };
   coverage: { modulePath: string; source: string; classCount: number; coveredLines: number; missedLines: number; classes: ClassResult[] }[];
+  moduleProgress?:ModuleProgress[]; noTestModules?:string[];
   groups: { initialSatisfied: ClassResult[]; pending: ClassResult[]; supplemented: ClassResult[] };
 }
-export interface Progress { round: number; stage: string; percent: number; message: string }
+export interface ModuleProgress {key:string;modulePath:string;name:string;phase:string;stage:string;status:string;startedAt?:string;finishedAt?:string;dependency:boolean}
+export interface Progress { round: number; stage: string; percent: number; message: string; indeterminate?:boolean; modules?:ModuleProgress[] }
+export interface RoundSelector {rootPomPath:string;id:string;round:number}
+export interface RecordFile {name:string;path:string;exists:boolean;size:number}
+export interface Recovery {available:boolean;reason?:string;sessionId?:string;originRound?:number;provider?:string;executable?:string;args?:string[];cwd?:string}
+export interface RoundRecordsData {files:RecordFile[];directory:string;recovery:Recovery}
 export interface LogEvent { id: number; type: string; data: { text?: string; stream?: string; timestamp?: string } }
 export interface Snapshot {
   id: string; status: string; mode: string; message: string; configId?: string; configName?: string; statistics?: StatisticsNode; startedAt?: string; finishedAt?: string; progress?: Progress;
@@ -29,7 +35,7 @@ export interface Snapshot {
 }
 export interface JobSummary { id: string; status: string; mode: string; message: string; startedAt: string; finishedAt?: string; name: string }
 export type PathKind = 'project' | 'settings' | 'jdk' | 'maven' | 'agent' | 'repository';
-export interface Bridge { request: <T>(route: string, payload?: unknown) => Promise<T>; choosePath: (kind: PathKind) => Promise<string | null>; openArtifact: (path: string) => Promise<void>; version: string }
+export interface Bridge { request: <T>(route: string, payload?: unknown) => Promise<T>; choosePath: (kind: PathKind) => Promise<string | null>; openArtifact: (path: string) => Promise<void>; recoverSession:(selector:RoundSelector)=>Promise<{sessionId:string}>; version: string }
 declare global { interface Window { coverage?: Bridge } }
 
 export interface StatisticsNode { id:string; name:string; kind:string; coveredLines:number; totalLines:number; classCount:number; lineCoverage:number|null; measured:boolean; children:StatisticsNode[] }

@@ -163,10 +163,10 @@ public final class TestResults {
             case passed:
                 return "测试执行通过" + suffix;
             case no_tests:
-                return "没有发现可执行测试；本轮继续生成 0% 覆盖率基线";
+                return "所选范围没有可执行测试；覆盖率标记为未测，补测模式可继续生成测试";
             case test_failed:
                 return continuedAfterFailure
-                        ? "存在失败测试；统计模式已继续执行后续模块，Surefire 报告和 Maven 日志已保存"
+                        ? "存在失败测试；已继续采集所选模块，Surefire 报告和 Maven 日志已保存"
                         : "测试执行失败；Surefire 报告和 Maven 日志已保存";
             case build_failed:
                 return "Maven 在测试结果完成前失败；请查看完整日志和已归档报告";

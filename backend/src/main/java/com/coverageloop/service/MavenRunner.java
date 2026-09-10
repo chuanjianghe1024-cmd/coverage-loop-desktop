@@ -228,6 +228,8 @@ public class MavenRunner {
             throw new IllegalArgumentException("请至少选择一个模块");
         }
 
+        lastPercent.set(0);
+        buildProgress=new BuildProgress(config); buildProgress.queueTests();
         RunHistory.PreparedRound prepared = RunHistory.prepareRound(config, sessionId);
         MavenCommandPreview command = resolveMavenCommand(config, options);
         String startedAt = Instant.now().toString();
@@ -247,13 +249,14 @@ public class MavenRunner {
         Integer preInstallExitCode = null;
         try {
             if (shouldPreInstall && command.preInstallArgs != null) {
-                phase[0] = "pre-install";
+                phase[0] = "pre-install"; buildProgress.begin(phase[0]);
                 output(prepared, "system", "预构建（跳过测试）：" + command.executable + " "
                         + String.join(" ", command.preInstallArgs) + "\n");
                 updateProgress(prepared, 5, MavenProgressStage.installing, "正在执行首轮预构建：skip tests install");
                 ProcessExecution preInstallResult = execute(prepared, config, command, command.preInstallArgs,
                         lastProcessOutputAt, logBuffer, logWriterRef, phase);
                 preInstallExitCode = preInstallResult.exitCode;
+                buildProgress.end(preInstallExitCode==null?-1:preInstallExitCode);
                 output(prepared, "system", "预构建已结束，退出码：" + preInstallResult.exitCode + "\n");
                 if (preInstallResult.exitCode != 0) {
                     execution = preInstallResult;
@@ -270,6 +273,7 @@ public class MavenRunner {
                 execution = executeCoverage(prepared, config, command, options,
                         lastProcessOutputAt, logBuffer, logWriterRef, phase);
             }
+            buildProgress.finishTask(!Objects.equals(execution.exitCode,0));
             output(prepared, "system", "Maven 已结束，退出码：" + execution.exitCode + "\n");
             updateProgress(prepared, 96, MavenProgressStage.summarizing, "正在读取类级与配置目录覆盖率");
 
@@ -338,9 +342,12 @@ public class MavenRunner {
             result.coverage = coverage;
             result.groups = persisted.groups;
             result.tests = tests;
+            result.moduleProgress=buildProgress.snapshot();
+            if(options.scopeTests)result.noTestModules=ScopedTests.plan(config).stream().filter(s->s.tests().isEmpty()).map(ScopedTests.Selection::modulePath).toList();
             return result;
         } catch (Exception error) {
             child.set(null);
+            buildProgress.finishTask(true);
             output(prepared, "system", "Maven 执行失败：" + error.getMessage() + "\n");
             updateProgress(prepared, 100, MavenProgressStage.failed, "Maven 进程启动或覆盖率汇总失败，日志已保存");
             throw error;
@@ -355,6 +362,7 @@ public class MavenRunner {
     private ProcessExecution executeCoverage(RunHistory.PreparedRound prepared, ProjectConfig config,
             MavenCommandPreview command, RunOptions options, AtomicLong outputAt, StringBuilder buffer,
             AtomicReference<LogWriter> writer, String[] phase) throws Exception {
+        buildProgress.begin("coverage");
         if (!options.scopeTests) return execute(prepared,config,command,command.args,outputAt,buffer,writer,phase);
         ProcessExecution combined=new ProcessExecution(); combined.exitCode=0;
         int index=0;
@@ -365,11 +373,24 @@ public class MavenRunner {
             arguments.addAll(ScopedTests.writeFilters(selection,java.nio.file.Path.of(prepared.runDirectory),++index));
             output(prepared,"system","范围测试："+selection.modulePath()+"，生产类 "+selection.sourceCount()
                     +"，测试文件 "+selection.tests().size()+"；清单已写入本轮目录\n");
+            buildProgress.module(selection.modulePath(),"scanning","running");
+            updateProgress(prepared,35,MavenProgressStage.resolving,"正在测试模块 "+selection.modulePath());
             ProcessExecution result=execute(prepared,one,moduleCommand,arguments,outputAt,buffer,writer,phase);
+            buildProgress.flush();
+            buildProgress.module(selection.modulePath(),selection.tests().isEmpty()?"no-tests":"finished",!Objects.equals(result.exitCode,0)?"failed":selection.tests().isEmpty()?"skipped":moduleTestsFailed(one)?"failed":"success");
+            updateProgress(prepared,85,MavenProgressStage.summarizing,"模块 "+selection.modulePath()+" 执行结束");
             if (!Objects.equals(result.exitCode,0)) combined.exitCode=result.exitCode;
             if (result.signal!=null) combined.signal=result.signal;
         }
         return combined;
+    }
+
+    private boolean moduleTestsFailed(ProjectConfig config) {
+        java.nio.file.Path reports=java.nio.file.Path.of(config.rootPomPath).getParent().resolve(config.selectedModulePaths.get(0)).resolve("target/surefire-reports");
+        if(!java.nio.file.Files.isDirectory(reports))return false;
+        try(var files=java.nio.file.Files.newDirectoryStream(reports,"TEST-*.xml")) {
+            for(var file:files) {var root=com.coverageloop.util.XmlUtil.parse(java.nio.file.Files.readString(file));if(root!=null&&(Integer.parseInt(root.getAttribute("failures"))+Integer.parseInt(root.getAttribute("errors"))>0))return true;}
+        }catch(Exception ignored){} return false;
     }
 
     private ProcessExecution execute(RunHistory.PreparedRound prepared, ProjectConfig config, MavenCommandPreview command,
@@ -407,11 +428,11 @@ public class MavenRunner {
         LogWriter writer = new LogWriter(prepared.logPath);
         logWriterRef.set(writer);
         Thread stdoutThread = pump(process.getInputStream(), chunk -> {
-            String text = new String(chunk, StandardCharsets.UTF_8);
+            String text = chunk;
             forward(prepared, command, "stdout", text, lastProcessOutputAt, logBuffer, writer, phase);
         });
         Thread stderrThread = pump(process.getErrorStream(), chunk -> {
-            String text = new String(chunk, StandardCharsets.UTF_8);
+            String text = chunk;
             forward(prepared, command, "stderr", text, lastProcessOutputAt, logBuffer, writer, phase);
         });
 
@@ -464,16 +485,18 @@ public class MavenRunner {
         }
         output(prepared, stream, text);
         writer.append("[%s] [%s] %s".formatted(Instant.now(), stream, text));
+        if(buildProgress!=null)buildProgress.feed(stream,text);
         inferProgress(prepared, command, phase, text.toLowerCase());
+        updateProgress(prepared,lastPercent.get(),"pre-install".equals(phase[0])?MavenProgressStage.installing:MavenProgressStage.testing,"正在执行 "+phase[0]);
     }
 
-    private Thread pump(java.io.InputStream stream, java.util.function.Consumer<byte[]> consumer) {
+    private Thread pump(java.io.InputStream stream, java.util.function.Consumer<String> consumer) {
         Thread thread = new Thread(() -> {
-            byte[] buffer = new byte[8192];
-            try {
+            char[] buffer = new char[8192];
+            try (var reader = new java.io.InputStreamReader(stream, StandardCharsets.UTF_8)) {
                 int read;
-                while ((read = stream.read(buffer)) != -1) {
-                    if (read > 0) consumer.accept(java.util.Arrays.copyOf(buffer, read));
+                while ((read = reader.read(buffer)) != -1) {
+                    if (read > 0) consumer.accept(new String(buffer, 0, read));
                 }
             } catch (IOException error) {
                 // 进程退出后流关闭，正常结束
@@ -503,12 +526,13 @@ public class MavenRunner {
         if (value.contains("build failure")) updateProgress(prepared, 93, MavenProgressStage.summarizing, "Maven 已失败，正在保存本轮证据");
     }
 
+    private BuildProgress buildProgress;
     private final AtomicInteger lastPercent = new AtomicInteger(0);
 
     private void updateProgress(RunHistory.PreparedRound prepared, int percent,
                                 MavenProgressStage stage, String message) {
         int previous = lastPercent.get();
-        if (percent < previous && stage != MavenProgressStage.failed) return;
+        percent=Math.max(previous,percent);
         lastPercent.set(percent);
         MavenProgressEvent event = new MavenProgressEvent();
         event.runId = prepared.runId;
@@ -517,6 +541,12 @@ public class MavenRunner {
         event.percent = percent;
         event.message = message;
         event.timestamp = Instant.now().toString();
+        event.modules=buildProgress==null?List.of():buildProgress.snapshot();
+        event.indeterminate=true;
+        if(stage!=MavenProgressStage.completed&&stage!=MavenProgressStage.failed){
+            var active=event.modules.stream().filter(m->m.status.equals("running")).findFirst();
+            if(active.isPresent()){var m=active.get();event.message=(m.phase.equals("pre-install")?"依赖预构建":"范围测试")+" · "+m.name+" · "+m.stage;}
+        }
         sink.progress(event);
     }
 

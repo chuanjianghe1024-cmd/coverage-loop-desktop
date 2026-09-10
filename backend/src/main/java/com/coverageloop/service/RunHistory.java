@@ -159,9 +159,9 @@ public final class RunHistory {
         int index = 1;
         for (CoverageGroupedClass item : groups.pending) {
             int total = item.coveredLines + item.missedLines;
-            failedClassLines.add(String.format("%d. [%s] %s | LINE=%s%% | covered=%d/%d", index++,
+            failedClassLines.add(String.format("%d. [%s] %s | LINE=%s | covered=%d/%d", index++,
                     item.modulePath, item.qualifiedName,
-                    item.currentLineCoverage == null ? 0 : item.currentLineCoverage,
+                    coverage.stream().anyMatch(m -> m.modulePath.equals(item.modulePath)&&"jacoco".equals(m.source)) ? item.currentLineCoverage+"%" : "未测",
                     item.coveredLines, total));
         }
         List<String> gateLines = new ArrayList<>();
@@ -170,7 +170,7 @@ public final class RunHistory {
         gateLines.add("Initial passed : " + groups.initialSatisfied.size());
         gateLines.add("Supplemented   : " + groups.supplemented.size());
         gateLines.add("Remaining      : " + groups.pending.size());
-        gateLines.add(groups.pending.isEmpty() ? "ALL_TARGETS_PASS" : "COVERAGE_GATE_FAILED");
+        gateLines.add(coverage.stream().anyMatch(m -> !"jacoco".equals(m.source)) ? "COVERAGE_INCOMPLETE" : groups.pending.isEmpty() ? "ALL_TARGETS_PASS" : "COVERAGE_GATE_FAILED");
         gateLines.add("");
         gateLines.addAll(failedClassLines);
         gateLines.add("");
@@ -202,6 +202,10 @@ public final class RunHistory {
         session.put("baselinePath", baselinePath);
         session.put("latestCoverageSnapshotPath", coverageSnapshotPath);
         session.put("updatedAt", finishedAt);
+        session.put("rootPomPath",config.rootPomPath);
+        session.put("round",prepared.round);
+        session.put("agentProvider",config.agent.provider);
+        Fs.writeString(new File(prepared.runDirectory, "round-"+roundLabel+"-session.json").getPath(), Json.toJson(session)+"\n");
         Fs.writeString(new File(prepared.runDirectory, "session.json").getPath(), Json.toJson(session) + "\n");
 
         PersistedCoverage result = new PersistedCoverage();

@@ -55,6 +55,35 @@ node scripts/backend.mjs test -Dcoverage.test.maven=/path/to/maven/bin/mvn
 
 Windows 上请用 `mvn.cmd` 的完整路径。
 
+## v1.2 运行台与轮次记录
+
+- 底部常驻控制台，可展开/收起；收起时保留运行波形、当前模块与阶段、耗时和模块完成数量。实时输出可关闭自动跟随；模块页展示预构建与范围测试各模块的等待、运行、成功、失败和跳过状态。进度来自 Maven 输出，不用耗时估算百分比。
+- 包树按父子关系组织：`api` 自身的类和 `api.conf`、`api.dep` 子包位于同一父节点下。父包勾选包含其子包；统计树逐层累加行数，不重复统计。
+- 看板中的未达标类可独立折叠。下方“打开本轮记录”提供 `coverage.json`、`coverage-gate.txt`、`failed-classes.txt`、`maven.log`、`summary.txt` 和 `session.json` 标签页。`summary.txt` 对应磁盘上的 `round-NNN-test-summary.txt`；其余文件也绑定所选轮次，不会跳到最新轮。
+- 六种文件在应用内只读预览，单文件最多显示前 512 KB，也可打开目录查看全文。旧版本没有独立轮次 session 文件时说明缺失，不拿最新 session 冒充历史记录。
+- 浅绿界面增加卡片入场、图表生长、选中标签滑动、折叠过渡和运行波形；支持系统“减少动态效果”。
+
+### Maven 构建和测试判定
+
+每个任务默认在首轮对所选模块及上游依赖执行 `install -DskipTests=true`，保留测试编译以兼容 test-jar 依赖；不默认 `clean`。后续补测轮只运行范围内的测试与覆盖率。已有依赖时可关闭预构建。普通 `test` 阶段不会触发绑定在 `package` 的 ProGuard；首轮 install 仍会经过 ProGuard，短仓库路径配置仍有效。
+
+测试清单之外的测试不执行。范围内测试失败时继续采集其他选中模块，并最终明确标为失败/需修复；自动补测进入修复轮，不能因 Maven 忽略失败而判为达标。编译或依赖错误仍是构建失败。没有测试文件的模块保留为“未测”，不阻断其他模块统计，并允许自动补测为其生成测试；缺少有效报告的模块不会显示伪造覆盖率。
+
+### Recover session
+
+结束任务后，可在所选轮次的记录区点击 **Recover session**，在 Windows PowerShell 终端继续 Hermes / OpenCode 的原生会话。应用记录助手实际返回的会话 ID，并使用明确命令：
+
+```text
+hermes chat --resume <session-id>
+opencode --session <session-id>
+```
+
+Hermes 的 profile 和 OpenCode 的 attach 配置来自当时保存的配置。恢复终端在原工程目录启动；恢复期间请在该终端完成操作并关闭窗口，再启动新的桌面任务。此操作恢复助手对话，新的改动需要回到桌面重新运行验证；不会自动回滚工程文件或自动续跑 Maven 循环。
+
+每个 Agent 补测轮与其前置验证轮关联。后续验证轮可恢复最近的相关 Agent 会话，界面显示会话来源轮次。仅 Maven 基线或没有原生会话 ID 的旧记录会禁用按钮并说明原因，不使用“最近一次会话”猜测。凭据仍由本机 Agent CLI 管理。
+
+命令依据：[Hermes 会话文档](https://hermes-agent.nousresearch.com/docs/user-guide/sessions)、[OpenCode CLI](https://opencode.ai/docs/cli/)。
+
 ## Windows 安装包
 
 在 Windows x64 上安装 Node.js 与完整 JDK 17+，设置 `JAVA_HOME`：
@@ -90,7 +119,7 @@ npx shadcn@latest add @aceternity/bento-grid
 - 已有旧版配置首次打开工程时导入 SQLite；旧文件保留。
 - 第一轮建立基线；DT 变化是执行用例数差值，参数化测试可能按多条计数。
 - 缺少有效 JaCoCo 报告时不显示真实覆盖率，也不判定达标。
-- 退出/取消会停止子进程。意外退出后任务标记为中断，历史数据可回看；不会自动恢复执行。
+- 退出/取消会停止应用管理的 Maven / Agent 子进程；手动恢复终端需自行关闭。意外退出后任务标记为中断，历史数据可回看；不会自动恢复执行。
 - 默认仅要求 Agent 修改 `src/test`，这不是系统级文件隔离。请在独立分支/工作树运行，并在提交前检查全仓库 diff。
 - 当前界面支持行覆盖率；不支持分支门禁、自动断点续跑或将 DT 精确归属到生产类。
 
