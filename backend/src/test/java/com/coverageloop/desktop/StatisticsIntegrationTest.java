@@ -43,7 +43,7 @@ class StatisticsIntegrationTest {
         MavenRunner.RunOptions options=new MavenRunner.RunOptions();options.scopeTests=true;
         MavenRunResult result=runner.run(c,null,options);
         assertEquals(0,result.exitCode,()->Fs.readStringQuiet(result.logPath));
-        assertEquals(TestExecutionStatus.passed,result.tests.status);
+        assertEquals(TestExecutionStatus.passed,result.tests.status,()->Fs.readStringQuiet(result.logPath));
         assertFalse(result.command.args.contains("-am"));assertTrue(result.command.preInstallArgs.contains("-am"));
         assertFalse(Files.exists(temp.resolve("module-b/target/surefire-reports")));
         assertFalse(Files.exists(temp.resolve("module-a/target/surefire-reports/TEST-com.other.MustNotRunTest.xml")));
@@ -82,9 +82,9 @@ class StatisticsIntegrationTest {
         String line=Fs.readStringQuiet(temp.resolve("module-1-tests.exclude").toString()).trim();
         assertFalse(line.contains("!"));
         var regex=java.util.regex.Pattern.compile(line.substring(7,line.length()-1));
-        for(String allowed:List.of("demo/AlphaTest.class","demo/AlphabetTest.class","demo/AlphaTest$Nested.class","RootTest.class"))
+        for(String allowed:List.of("demo/AlphaTest.class","demo/AlphabetTest.class","demo/AlphaTest$Nested.class","RootTest.class","demo\\AlphaTest.class","demo\\AlphaTest$Nested.class"))
             assertFalse(regex.matcher(allowed).matches(),allowed);
-        for(String excluded:List.of("demo/AlphaTest2.class","demo/Alph.class","demo/GeneratedTest.class","elsewhere/AlphaTest.class","RootTests.class","Root.class"))
+        for(String excluded:List.of("demo/AlphaTest2.class","demo/Alph.class","demo/GeneratedTest.class","elsewhere/AlphaTest.class","RootTests.class","Root.class","demo\\AlphaTest2.class","demo\\GeneratedTest.class","elsewhere\\AlphaTest.class"))
             assertTrue(regex.matcher(excluded).matches(),excluded);
     }
     private static CoverageModuleResult module(String name,String source,int covered,int missed) {

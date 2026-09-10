@@ -4,7 +4,6 @@ import com.coverageloop.model.*;
 import com.coverageloop.util.Fs;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.regex.Pattern;
 
 /** Production selection controls measurement; tests run within those production packages. */
 public final class ScopedTests {
@@ -63,15 +62,20 @@ public final class ScopedTests {
         String complement() {
             if (anySuffix) return null;
             if (children.isEmpty()) return terminal ? ".+" : ".*";
-            String chars = String.join("", children.keySet().stream().map(c -> "\\x{" + Integer.toHexString(c) + "}").toList());
+            // Surefire 3.2.x matches regexes against native Windows separators;
+            // accept both forms, including the negated edge of the complement.
+            String chars = String.join("", children.keySet().stream().map(Trie::characterSet).toList());
             List<String> alternatives = new ArrayList<>();
             alternatives.add("[^" + chars + "].*");
             for (var entry : children.entrySet()) {
                 String rest = entry.getValue().complement();
-                if (rest != null) alternatives.add(Pattern.quote(entry.getKey().toString()) + rest);
+                if (rest != null) alternatives.add("[" + characterSet(entry.getKey()) + "]" + rest);
             }
             if (!terminal) alternatives.add("");
             return "(?:" + String.join("|", alternatives) + ")";
+        }
+        static String characterSet(char c) {
+            return c=='/' ? "\\x{2f}\\x{5c}" : "\\x{" + Integer.toHexString(c) + "}";
         }
     }
 }
