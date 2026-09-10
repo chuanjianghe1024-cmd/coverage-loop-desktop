@@ -134,7 +134,9 @@ public class MavenRunner {
         List<String> baseArgs = new ArrayList<>();
         baseArgs.add("--no-transfer-progress");
         baseArgs.add("-f");
-        baseArgs.add(rootPomPath);
+        // On Windows, older Java launchers can lose non-ACP characters in argv.
+        // The canonical process directory already identifies the root project.
+        baseArgs.add(Proc.isWindows() ? new File(rootPomPath).getName() : rootPomPath);
         if (config.maven.parallelThreads > 1 && !hasThreadOption(config.maven.extraArgs)) {
             baseArgs.add(0, "-T");
             baseArgs.add(1, String.valueOf(config.maven.parallelThreads));
@@ -419,6 +421,16 @@ public class MavenRunner {
         ProcessBuilder builder = new ProcessBuilder(cmdLine);
         builder.directory(new File(command.workingDirectory));
         builder.environment().putAll(env);
+        if(Proc.isWindows()) {
+            // mvn.cmd otherwise passes the absolute project directory through a JVM -D argument.
+            // Keep its ancestor .mvn discovery, expressed relative to the canonical working directory.
+            java.nio.file.Path root=java.nio.file.Path.of(command.workingDirectory),base=root;
+            for(java.nio.file.Path path=root;path!=null;path=path.getParent()) {
+                if(java.nio.file.Files.isDirectory(path.resolve(".mvn"))){base=path;break;}
+            }
+            String relative=root.relativize(base).toString();
+            builder.environment().put("MAVEN_BASEDIR",relative.isEmpty()?".":relative);
+        }
         builder.redirectErrorStream(false);
         if (cancelled.getAsBoolean() || stopRequested) throw new java.util.concurrent.CancellationException("任务已停止");
         if ("coverage".equals(phase[0])) {

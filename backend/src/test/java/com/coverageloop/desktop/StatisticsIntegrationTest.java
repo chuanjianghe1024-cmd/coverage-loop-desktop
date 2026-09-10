@@ -90,7 +90,7 @@ class StatisticsIntegrationTest {
         assertTrue(first.preInstall.attempted);assertTrue(first.tests.tests>0);
         assertFalse(Files.exists(temp.resolve("module-a/target/surefire-reports")));
         assertTrue(Files.exists(temp.resolve("module-b/target/surefire-reports/TEST-com.sample.b.CalculatorTest.xml")));
-        assertTrue(first.command.args.contains("-am"));assertEquals(temp.toRealPath().resolve("pom.xml").toString(),first.command.args.get(first.command.args.indexOf("-f")+1));
+        assertTrue(first.command.args.contains("-am"));assertEquals(temp.toRealPath().resolve("pom.xml"),Path.of(first.command.workingDirectory).resolve(first.command.args.get(first.command.args.indexOf("-f")+1)).toRealPath());
         String log=Files.readString(Path.of(first.logPath));assertEquals(1,log.split("\\[coverage\\] cwd=",-1).length-1);assertTrue(log.contains("coverage.loop.scope="));
         MavenRunResult next=runner.run(c,first.runId,options);assertEquals(0,next.exitCode,()->Fs.readStringQuiet(next.logPath));assertFalse(next.preInstall.attempted);assertEquals(first.tests.tests,next.tests.tests);
         assertTrue(Files.exists(Path.of(next.runDirectory,"round-002-scope/test-scope.properties.ready")));

@@ -40,8 +40,10 @@ final class ReactorScope {
         String prefix = "-Dmaven.ext.class.path=";
         String existing = arguments.stream().filter(a -> a.startsWith(prefix)).reduce((a,b) -> b).map(a -> a.substring(prefix.length())).orElse("");
         arguments.removeIf(a -> a.startsWith(prefix) || a.startsWith("-Dcoverage.loop.scope=") || a.startsWith("-Dcoverage.loop.preinstall="));
-        arguments.add(prefix + (existing.isBlank() ? "" : existing + File.pathSeparator) + extension.toAbsolutePath());
-        arguments.add("-Dcoverage.loop.scope=" + plan.toAbsolutePath());
+        Path root=Path.of(config.rootPomPath).toRealPath().getParent();
+        // Paths inside the project stay off the Windows launcher as absolute Unicode strings.
+        arguments.add(prefix + (existing.isBlank() ? "" : existing + File.pathSeparator) + root.relativize(extension.toRealPath()));
+        arguments.add("-Dcoverage.loop.scope=" + root.relativize(plan.toRealPath()));
         Path ready = Path.of(plan + ".ready"); Files.deleteIfExists(ready); return ready;
     }
 }
