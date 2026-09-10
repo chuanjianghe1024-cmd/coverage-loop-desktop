@@ -13,16 +13,21 @@ final class ReactorScope {
     static Path prepare(ProjectConfig config, RunHistory.PreparedRound round, List<String> arguments) throws IOException {
         Path directory = Files.createDirectories(Path.of(round.runDirectory, "round-" + Names.roundLabel(round.round) + "-scope"));
         Path extension = directory.resolve("reactor-scope.jar");
-        String clazz = "com/coverageloop/maven/ScopeParticipant.class";
         try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(extension))) {
-            jar.putNextEntry(new JarEntry(clazz));
-            try (InputStream input = ReactorScope.class.getResourceAsStream("/" + clazz)) {
-                if (input == null) throw new IOException("缺少 Maven 范围扩展，请重新安装软件");
-                input.transferTo(jar);
+            for(String name:List.of("ScopeParticipant", "JacocoPathListener")) {
+                String clazz="com/coverageloop/maven/"+name+".class";
+                jar.putNextEntry(new JarEntry(clazz));
+                try (InputStream input = ReactorScope.class.getResourceAsStream("/" + clazz)) {
+                    if (input == null) throw new IOException("缺少 Maven 范围扩展，请重新安装软件");
+                    input.transferTo(jar);
+                }
+                jar.closeEntry();
             }
-            jar.closeEntry(); jar.putNextEntry(new JarEntry("META-INF/plexus/components.xml"));
+            jar.putNextEntry(new JarEntry("META-INF/plexus/components.xml"));
             jar.write(("<component-set><components><component><role>org.apache.maven.AbstractMavenLifecycleParticipant</role>"
                     + "<role-hint>coverage-loop-scope</role-hint><implementation>com.coverageloop.maven.ScopeParticipant</implementation>"
+                    + "</component><component><role>org.apache.maven.execution.MojoExecutionListener</role>"
+                    + "<role-hint>coverage-loop-jacoco-path</role-hint><implementation>com.coverageloop.maven.JacocoPathListener</implementation>"
                     + "</component></components></component-set>").getBytes(java.nio.charset.StandardCharsets.UTF_8));
         }
         List<ScopedTests.Selection> selections = ScopedTests.plan(config);
