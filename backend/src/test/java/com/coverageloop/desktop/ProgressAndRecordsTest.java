@@ -27,7 +27,8 @@ class ProgressAndRecordsTest {
     @Test void parallelModulesStayRunningUntilTheirOwnCompletion(){
         ProjectConfig c=config();c.maven.parallelThreads=2;BuildProgress p=new BuildProgress(c);p.begin("pre-install");
         p.feed("stdout","[INFO] --- compiler:3.13.0:compile (default) @ module-a ---\n[INFO] --- compiler:3.13.0:compile (default) @ module-b ---\n");
-        assertEquals(2,p.snapshot().stream().filter(m->m.status.equals("running")).count());
+        p.feed("stdout","[INFO] Tests run: 2, Failures: 1, Errors: 0, Skipped: 0\n");
+        assertEquals(2,p.snapshot().stream().filter(m->m.status.equals("running")).count(),"Test results do not mean the Maven module has finished reporting");
         p.feed("stdout","[INFO] module-a ........ SUCCESS [ 1s]\n[INFO] module-b ........ FAILURE [ 2s]\n");
         assertEquals(List.of("success","failed"),p.snapshot().stream().map(m->m.status).toList());
     }
