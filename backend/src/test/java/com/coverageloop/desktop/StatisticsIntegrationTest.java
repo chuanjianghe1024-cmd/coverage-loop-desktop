@@ -31,6 +31,9 @@ class StatisticsIntegrationTest {
     }
     @Test void selectedPackageTestsRunWithoutUnselectedModulesOrBroadPomIncludes() throws Exception {
         ProjectConfig c=fixture(); c.scopes=List.of(include("module-a","com.sample.a.Greeter"));
+        c.maven.versionNumber="1.0.0";c.maven.forceUpdate=true;
+        Path chosenTest=temp.resolve("module-a/src/test/java/com/sample/a/GreeterTest.java");
+        Files.writeString(chosenTest,Files.readString(chosenTest).replace("class GreeterTest {", "class GreeterTest { @org.junit.jupiter.api.Test void receivesVersionParameter(){org.junit.jupiter.api.Assertions.assertEquals(\"1.0.0\",System.getProperty(\"version_number\"));}"));
         Fs.writeString(temp.resolve("module-a/src/main/java/com/other/Other.java").toString(),"package com.other; public class Other { public int value(){return 1;} }");
         Fs.writeString(temp.resolve("module-a/src/test/java/com/other/MustNotRunTest.java").toString(),"package com.other; class MustNotRunTest { @org.junit.jupiter.api.Test void fail(){throw new AssertionError(\"Unselected test ran\");} }");
         Path pom=temp.resolve("pom.xml");

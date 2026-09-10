@@ -161,6 +161,15 @@ public class MavenRunner {
             }
         }
 
+        if (config.maven.versionNumber != null && !config.maven.versionNumber.isBlank()) baseArgs.add("-Dversion_number=" + config.maven.versionNumber.trim());
+        if (config.maven.forceUpdate) baseArgs.add("-U");
+        List<String> extraArgs=withoutSystemProperties(config.maven.extraArgs,List.of("version_number"));
+        extraArgs=extraArgs.stream().filter(a -> !a.equals("-U")&&!a.equals("--update-snapshots")).toList();
+        // Direct service callers may still provide legacy arguments without passing ConfigStore.
+        if (config.maven.versionNumber == null || config.maven.versionNumber.isBlank()) {
+            config.maven.extraArgs.stream().filter(a -> a.startsWith("-Dversion_number=")).reduce((a,b)->b).ifPresent(baseArgs::add);
+        }
+        if (!config.maven.forceUpdate && config.maven.extraArgs.stream().anyMatch(a -> a.equals("-U")||a.equals("--update-snapshots"))) baseArgs.add("-U");
         List<String> args = new ArrayList<>(baseArgs);
         if (options.scopeTests) args.remove("-am");
         if (!hasSystemProperty(config.maven.extraArgs, "failIfNoTests")) {
@@ -175,9 +184,9 @@ public class MavenRunner {
         }
         List<String> executionProperties = List.of("skipTests", "maven.test.skip", "jacoco.skip", "maven.test.failure.ignore");
         List<String> coverageExtraArgs = options.continueOnTestFailure
-                ? withoutSystemProperties(config.maven.extraArgs,
+                ? withoutSystemProperties(extraArgs,
                         combine(executionProperties, List.of("maven.test.failure.ignore")))
-                : withoutSystemProperties(config.maven.extraArgs, executionProperties);
+                : withoutSystemProperties(extraArgs, executionProperties);
         args.addAll(options.scopeTests ? withoutSystemProperties(coverageExtraArgs,
                 List.of("test","surefire.includes","surefire.excludes","surefire.includesFile","surefire.excludesFile")) : coverageExtraArgs);
         if (options.continueOnTestFailure) args.add("-Dmaven.test.failure.ignore=true");
@@ -192,7 +201,7 @@ public class MavenRunner {
         List<String> preInstallArgs = null;
         if (config.maven.preInstall) {
             preInstallArgs = new ArrayList<>(baseArgs);
-            preInstallArgs.addAll(withoutSystemProperties(config.maven.extraArgs,
+            preInstallArgs.addAll(withoutSystemProperties(extraArgs,
                     List.of("skipTests", "maven.test.skip", "jacoco.skip", "maven.test.failure.ignore")));
             preInstallArgs.add("-DskipTests=true");
             preInstallArgs.add("-Djacoco.skip=true");

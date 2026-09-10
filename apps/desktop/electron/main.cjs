@@ -49,7 +49,7 @@ async function boot() {
   await startEngine();
   ipcMain.handle('coverage:request',async (event,route,payload) => {
     checkSender(event); validateRoute(route);
-    if (route === '/run/start' && recoveryTerminal) throw new Error('请先关闭正在恢复会话的终端，再启动新的任务');
+    if (['/run/start','/history/delete'].includes(route) && recoveryTerminal) throw new Error('请先关闭正在恢复会话的终端，再执行此操作');
     const result = await request(route,payload);
     if (route === '/project/open') roots.add(fs.realpathSync(result.project.rootDirectory));
     return result;

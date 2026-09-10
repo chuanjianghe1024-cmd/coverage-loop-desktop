@@ -12,6 +12,8 @@ public class MavenOptions {
     public String javaHome = "";
     public String settingsPath = "";
     public String localRepository = "";
+    public String versionNumber = "";
+    public boolean forceUpdate = false;
     public List<String> profiles = new ArrayList<>();
     public List<String> extraArgs = new ArrayList<>();
     public String testPattern = "";
@@ -25,6 +27,8 @@ public class MavenOptions {
         copy.javaHome = javaHome;
         copy.settingsPath = settingsPath;
         copy.localRepository = localRepository;
+        copy.versionNumber = versionNumber;
+        copy.forceUpdate = forceUpdate;
         copy.profiles = new ArrayList<>(profiles);
         copy.extraArgs = new ArrayList<>(extraArgs);
         copy.testPattern = testPattern;

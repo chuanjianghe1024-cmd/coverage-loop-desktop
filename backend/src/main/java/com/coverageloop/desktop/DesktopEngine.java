@@ -52,6 +52,7 @@ public final class DesktopEngine implements AutoCloseable {
             case "/round/file" -> new RoundRecords(store).read(input);
             case "/round/recovery" -> recover(input);
             case "/history" -> store.history(required(input,"rootPomPath"));
+            case "/history/delete" -> deleteHistory(required(input,"rootPomPath"),required(input,"id"),input.has("deleteFiles")&&input.get("deleteFiles").getAsBoolean());
             case "/history/detail" -> store.detail(required(input,"rootPomPath"), required(input,"id"));
             default -> throw new IllegalArgumentException("Unknown operation");
         };
@@ -104,11 +105,22 @@ public final class DesktopEngine implements AutoCloseable {
         requireIdle(); store.deleteStatisticsConfig(root,id);
         return store.statisticsConfigs(root);
     }
+    private synchronized Object deleteHistory(String root,String id,boolean deleteFiles) throws Exception {
+        if(id.equals(jobId))requireIdle();
+        String warning=store.deleteJob(root,id,deleteFiles);
+        if(id.equals(jobId)){
+            status="idle";jobId="";mode="";message="运行记录已删除，可以开始新的任务";
+            latest=null;loopResult=null;probe=null;statistics=null;progress=null;startedAt=null;finishedAt=null;
+            rounds.clear();agentRounds.clear();events.clear();
+        }
+        return Map.of("id",id,"warning",warning,"history",store.history(root));
+    }
     static void validate(ProjectConfig c, boolean execution) {
         ProjectScanResult project = ProjectScanner.scanMavenProject(c.rootPomPath);
         Set<String> modules = new HashSet<>(project.modules.stream().map(m -> m.relativePath).toList());
         if (execution && c.selectedModulePaths.isEmpty()) throw new IllegalArgumentException("请至少选择一个模块");
         if (!modules.containsAll(c.selectedModulePaths)) throw new IllegalArgumentException("配置包含不属于当前工程的模块，请重新扫描");
+        if (!c.maven.versionNumber.isBlank() && !c.maven.versionNumber.matches("[A-Za-z0-9][A-Za-z0-9._+\\-]*")) throw new IllegalArgumentException("Maven 版本号只能包含字母、数字、点、下划线、加号和连字符");
         if (c.coverage.lineThreshold <= 0 || c.coverage.lineThreshold > 100) throw new IllegalArgumentException("行覆盖率目标应大于 0 且不超过 100");
         if (c.coverage.branchThreshold != null && c.coverage.branchThreshold != 0) throw new IllegalArgumentException("当前重建版仅支持行覆盖率门禁，请将分支阈值设为 0");
         if (!c.coverage.jacocoVersion.matches("[0-9]+\\.[0-9]+\\.[0-9]+(?:[-.][A-Za-z0-9]+)*")) throw new IllegalArgumentException("JaCoCo 版本格式无效");

@@ -1,7 +1,7 @@
 export interface Scope { modulePath: string; kind: 'package' | 'class'; mode: 'include' | 'exclude'; pattern: string }
 export interface Config {
   id: string; name: string; rootPomPath: string; selectedModulePaths: string[]; scopes: Scope[];
-  maven: { useBundledMaven: boolean; preInstall: boolean; parallelThreads: number; executable: string; javaHome: string; settingsPath: string; localRepository: string; profiles: string[]; extraArgs: string[]; testPattern: string };
+  maven: { useBundledMaven: boolean; preInstall: boolean; parallelThreads: number; executable: string; javaHome: string; settingsPath: string; localRepository: string; versionNumber: string; forceUpdate: boolean; profiles: string[]; extraArgs: string[]; testPattern: string };
   coverage: { jacocoVersion: string; lineThreshold: number; branchThreshold: number };
   agent: { enabled: boolean; provider: string; executable: string; model: string; hermesProvider: string; opencodeAgent: string; opencodeAttach: string; extraArgs: string[]; batchSize: number; maxRounds: number; maxSameFailures: number; timeoutMinutes: number; heartbeatSeconds: number; autoApprove: boolean; allowProductionChanges: boolean; coveragePromptTemplate: string; repairPromptTemplate: string };
 }

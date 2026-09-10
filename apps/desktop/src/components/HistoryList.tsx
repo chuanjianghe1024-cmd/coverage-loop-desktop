@@ -1,0 +1,15 @@
+import { useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { History, ArrowUpRight, Trash2, LoaderCircle } from 'lucide-react';
+import type { JobSummary } from '@/lib/types';
+import { Status } from './Dashboard';
+const modes:Record<string,string>={baseline:'基线验证',loop:'自动补测',statistics:'覆盖率统计',probe:'Agent 检查'};
+export function HistoryList({jobs,onOpen,onDelete,notify}:{jobs:JobSummary[];onOpen:(id:string)=>Promise<void>;onDelete:(id:string,deleteFiles:boolean)=>Promise<void>;notify:(s:string)=>void}) {
+  const [pending,setPending]=useState<string|null>(null),[deleteFiles,setDeleteFiles]=useState(false),[deleting,setDeleting]=useState(false);
+  const returnFocus=useRef<HTMLButtonElement|null>(null);
+  const cancel=()=>{setPending(null);returnFocus.current?.focus();};
+  const remove=async(id:string)=>{setDeleting(true);try{await onDelete(id,deleteFiles);setPending(null);}catch(e){notify(String(e));}finally{setDeleting(false);}};
+  return <div className="panel history-panel"><AnimatePresence initial={false}>{jobs.map(j=><motion.div layout className="history-item" key={j.id} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} exit={{opacity:0,height:0,margin:0}} transition={{duration:.2}}><div className="history-row-actions"><button className="history-row" disabled={deleting} onClick={()=>void onOpen(j.id).catch(e=>notify(String(e)))}><span className="history-icon"><History size={20}/></span><span className="history-info"><strong>{j.name} · {modes[j.mode]??j.mode}</strong><small>{j.message}</small></span><time>{new Date(j.startedAt).toLocaleString()}</time><Status value={j.status}/><ArrowUpRight size={16}/></button><button className="icon-button history-delete" disabled={deleting||['running','stopping'].includes(j.status)} aria-label={'删除运行记录 '+j.name} title={['running','stopping'].includes(j.status)?'正在运行的记录不能删除':'删除运行记录'} onClick={e=>{returnFocus.current=e.currentTarget;setPending(j.id);setDeleteFiles(false);}}><Trash2 size={16}/></button></div>
+    <AnimatePresence initial={false}>{pending===j.id&&<motion.div className="history-delete-confirm" role="alertdialog" aria-label={'删除 '+j.name} initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} onKeyDown={e=>{if(e.key==='Escape'&&!deleting)cancel();}}><div><strong>删除这条运行记录？</strong><p>将删除本次任务及其全部轮次数据，项目配置和源码保留。</p><label className="delete-files-option"><input type="checkbox" checked={deleteFiles} onChange={e=>setDeleteFiles(e.target.checked)} disabled={deleting}/>同时清理本次日志与报告文件</label>{!deleteFiles&&<small>日志与报告将继续保留在项目的 .coverage-loop 目录。</small>}</div><div className="button-group"><button className="secondary small" disabled={deleting} onClick={cancel}>取消</button><button className="danger small" disabled={deleting} onClick={()=>void remove(j.id)}>{deleting?<LoaderCircle size={14} className="spin"/>:<Trash2 size={14}/>}确认删除</button></div></motion.div>}</AnimatePresence>
+  </motion.div>)}</AnimatePresence>{!jobs.length&&<div className="history-empty"><History size={30}/><h3>还没有运行记录</h3><p>第一次任务执行后，会自动出现在这里。</p></div>}</div>;
+}

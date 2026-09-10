@@ -116,5 +116,26 @@ public final class WorkspaceStore implements AutoCloseable {
         for(JsonObject row:rows("SELECT content FROM rounds WHERE job_id=? ORDER BY round_number",id)) rounds.add(row);
         value.add("rounds",rounds); return value;
     }
+    public synchronized String deleteJob(String root,String id,boolean deleteFiles) throws Exception {
+        JsonObject job=detail(root,id);
+        if(List.of("running","stopping").contains(job.get("status").getAsString()))throw new IllegalStateException("正在运行的记录不能删除");
+        Set<Path> otherReferences=new LinkedHashSet<>();
+        if(deleteFiles)for(JsonObject other:rows("SELECT content FROM jobs WHERE id<>?",id))otherReferences.addAll(HistoryArtifacts.references(other));
+        if(deleteFiles)for(JsonObject other:rows("SELECT content FROM rounds WHERE job_id<>?",id)){
+            if(other.has("runDirectory")&&!other.get("runDirectory").isJsonNull())otherReferences.add(Path.of(other.get("runDirectory").getAsString()).toAbsolutePath().normalize());
+        }
+        HistoryArtifacts files=deleteFiles?HistoryArtifacts.stage(root,job,otherReferences):null;
+        try {
+            db.setAutoCommit(false);
+            update("DELETE FROM rounds WHERE job_id=?",id);
+            update("DELETE FROM jobs WHERE root_pom=? AND id=?",root,id);
+            db.commit();
+        }catch(Exception e){
+            try{db.rollback();}catch(SQLException rollback){e.addSuppressed(rollback);}
+            if(files!=null)try{files.restore();}catch(Exception restore){e.addSuppressed(restore);}
+            throw e;
+        }finally{db.setAutoCommit(true);}
+        return files==null?"":files.remove();
+    }
     @Override public synchronized void close() { try {db.close();} catch(SQLException ignored) {} }
 }

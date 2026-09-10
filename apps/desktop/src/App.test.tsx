@@ -19,6 +19,8 @@ test('root + settings -> module/class rules -> editable prompts and batch -> sav
  const user=userEvent.setup();render(<App/>);
  await user.type(screen.getByLabelText('项目根目录',{exact:true}),'/sample');
  await user.type(screen.getByLabelText('Maven settings.xml（可选）',{exact:true}),'/company/settings.xml');
+ await user.type(screen.getByLabelText('Maven 版本号（version_number）'),'1.0.0');
+ await user.click(screen.getByRole('checkbox',{name:/强制更新依赖/}));
  await user.click(screen.getByRole('button',{name:'扫描工程并继续'}));
  expect(await screen.findByText('定义本次补测范围')).toBeInTheDocument();
  expect(screen.getByRole('checkbox',{name:'选择模块 module-a'})).toBeChecked();
@@ -34,6 +36,7 @@ test('root + settings -> module/class rules -> editable prompts and batch -> sav
  await waitFor(()=>expect(screen.getByText('让每一轮补测，都有迹可循。')).toBeInTheDocument());
  const saved=bridge.request.mock.calls.find(c=>c[0]==='/config/save')?.[1].config as typeof config;
  expect(saved.maven.settingsPath).toBe('/company/settings.xml');
+ expect(saved.maven.versionNumber).toBe('1.0.0');expect(saved.maven.forceUpdate).toBe(true);
  expect(saved.agent.batchSize).toBe(5);expect(saved.agent.coveragePromptTemplate).toBe('优先验证边界条件');
  expect(saved.maven.localRepository).toBe('D:/m2');
  expect(saved.scopes).toEqual([{modulePath:'module-a',kind:'class',pattern:'com.sample.a.Greeter',mode:'include'}]);

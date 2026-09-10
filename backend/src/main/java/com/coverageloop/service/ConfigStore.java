@@ -86,6 +86,17 @@ public final class ConfigStore {
         target.localRepository = source.localRepository == null ? "" : source.localRepository;
         target.profiles = source.profiles == null ? new ArrayList<>() : new ArrayList<>(source.profiles);
         target.extraArgs = source.extraArgs == null ? new ArrayList<>() : new ArrayList<>(source.extraArgs);
+        target.versionNumber = source.versionNumber == null ? "" : source.versionNumber.trim();
+        target.forceUpdate = source.forceUpdate;
+        // Preserve old extra-argument configurations while moving common options into visible fields.
+        boolean explicitVersion = !target.versionNumber.isEmpty();
+        for (String arg : target.extraArgs) {
+            if (arg == null) continue;
+            String value = arg.trim();
+            if (!explicitVersion && value.startsWith("-Dversion_number=")) target.versionNumber=value.substring(17).trim();
+            if (value.equals("-U") || value.equals("--update-snapshots")) target.forceUpdate=true;
+        }
+        target.extraArgs.removeIf(arg -> arg != null && (arg.trim().startsWith("-Dversion_number=") || arg.trim().equals("-U") || arg.trim().equals("--update-snapshots")));
         target.testPattern = source.testPattern == null ? "" : source.testPattern;
     }
 

@@ -22,6 +22,8 @@ test('select classes visually, save independent configurations, reload and execu
  await user.click(screen.getByRole('checkbox',{name:'选择模块 module-a'}));
  await user.click(screen.getByRole('button',{name:'展开 com.sample.a'}));
  await user.click(screen.getByRole('checkbox',{name:'选择类 com.sample.a.Other'}));
+ await user.type(screen.getByLabelText('Maven 版本号（version_number）'),'2.0.0');
+ await user.click(screen.getByRole('checkbox',{name:/强制更新依赖/}));
  const name=screen.getByLabelText('统计配置名称');await user.clear(name);await user.type(name,'服务 A');
  await user.click(screen.getByRole('button',{name:'保存配置'}));
  expect(await screen.findByText('统计配置已保存')).toBeInTheDocument();
@@ -29,6 +31,7 @@ test('select classes visually, save independent configurations, reload and execu
  expect(await screen.findByText('已另存为独立配置')).toBeInTheDocument();expect(stored).toHaveLength(2);
  await user.selectOptions(screen.getByLabelText('已保存的统计配置'),stored[0].id);
  expect(screen.getByLabelText('统计配置名称')).toHaveValue('服务 A');
+ expect(screen.getByLabelText('Maven 版本号（version_number）')).toHaveValue('2.0.0');expect(stored[0].maven.forceUpdate).toBe(true);
  await user.click(screen.getByRole('button',{name:'运行覆盖率统计'}));
  expect(start).toHaveBeenCalledWith(expect.objectContaining({id:stored[0].id,selectedModulePaths:['module-a'],scopes:[{modulePath:'module-a',kind:'class',mode:'include',pattern:'com.sample.a.Greeter'}]}));
  expect(screen.queryByLabelText('测试匹配规则')).not.toBeInTheDocument();
