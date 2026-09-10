@@ -1,0 +1,47 @@
+name: Verify desktop
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:ui
+      - run: npm run test:desktop
+      - run: npm run test:backend
+      - run: npm run build
+  windows-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:desktop
+      - run: npm run test:backend
+      - run: npm run package:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-loop-windows-x64
+          path: release/*.exe
+          if-no-files-found: error
