@@ -1,6 +1,6 @@
 import { RoundFailure } from './RoundFailure';
 import { useState, useMemo, useEffect } from 'react';
-import { Play, Square, FlaskConical, Bot, ArrowUpRight, FileCode2, Target, CheckCircle2, Clock3, ChevronRight, Search } from 'lucide-react';
+import { Play, Square, FlaskConical, Bot, ArrowUpRight, FileCode2, Target, CheckCircle2, Clock3, ChevronRight, Search, Settings2 } from 'lucide-react';
 import type { Config, Snapshot, LogEvent } from '@/lib/types';
 import { metrics, percent, delta } from '@/lib/metrics';
 import { BentoGrid, BentoGridItem } from './ui/bento-grid';
@@ -9,7 +9,7 @@ import { RoundRecords } from './RoundRecords';
 import { RunningWave } from './RuntimeDock';
 const statusNames:Record<string,string>={idle:'等待开始',running:'执行中',stopping:'停止中',completed:'已完成',failed:'执行失败',limited:'达到轮数上限',cancelled:'已停止',interrupted:'意外中断'};
 export function Status({value}:{value:string}) {return <span className={'status '+value}><span/>{statusNames[value]??value}</span>;}
-export function Dashboard({config,snapshot,onStart,onStop,busy,notify,historical}:{config:Config;snapshot:Snapshot;logs:LogEvent[];onStart:(mode:string)=>Promise<void>;onStop:()=>Promise<void>;busy:boolean;notify:(s:string)=>void;historical:boolean}) {
+export function Dashboard({config,snapshot,onStart,onStop,onConfigureAgent,busy,notify,historical}:{config:Config;snapshot:Snapshot;logs:LogEvent[];onStart:(mode:string)=>Promise<void>;onStop:()=>Promise<void>;onConfigureAgent:()=>void;busy:boolean;notify:(s:string)=>void;historical:boolean}) {
   const [selected,setSelected]=useState<number|null>(null);
   const [classesOpen,setClassesOpen]=useState(true);
   const [search,setSearch]=useState('');
@@ -28,7 +28,8 @@ export function Dashboard({config,snapshot,onStart,onStop,busy,notify,historical
     {title:'单元测试 · DT',value:round?String(current.tests):'—',note:previous?'执行 DT 变化 '+delta(current.tests-before.tests):round?'其中失败 / 错误 '+current.failedTests:'来自 Surefire 实际执行结果',icon:<FlaskConical size={17}/>},
     {title:'本轮新达标',value:newSatisfied==null?'—':String(newSatisfied),note:previous?'上一轮未达标、本轮达标的类':'第一轮建立基线',icon:<CheckCircle2 size={17}/>},
   ];
-  return <section className="dashboard"><div className="page-title"><div><div className="eyebrow">COVERAGE WORKBENCH{historical?' / HISTORY':''}</div><h1>{historical?'回看每一次进展':'让每一轮补测，都有迹可循。'}</h1><p>{config.selectedModulePaths.length} 个模块 · 每批 {config.agent.batchSize} 个类 · 最多 {config.agent.maxRounds} 轮验证</p></div><div className="button-group">{busy?<button className="danger" disabled={snapshot.status==='stopping'} onClick={()=>action(onStop)}><Square size={14}/>停止任务</button>:!historical&&<><button className="secondary" onClick={()=>action(()=>onStart('baseline'))}><FlaskConical size={16}/>运行基线</button><button className="primary" disabled={!config.agent.enabled} title={!config.agent.enabled?'请先在补测策略中启用 Agent':''} onClick={()=>action(()=>onStart('loop'))}><Play size={15}/>开始补测</button></>}</div></div>
+  return <section className="dashboard"><div className="page-title"><div><div className="eyebrow">COVERAGE WORKBENCH{historical?' / HISTORY':''}</div><h1>{historical?'回看每一次进展':'让每一轮补测，都有迹可循。'}</h1><p>{config.selectedModulePaths.length} 个模块 · 每批 {config.agent.batchSize} 个类 · 最多 {config.agent.maxRounds} 轮验证</p></div><div className="button-group">{busy?<button className="danger" disabled={snapshot.status==='stopping'} onClick={()=>action(onStop)}><Square size={14}/>停止任务</button>:!historical&&<><button className="secondary" onClick={()=>action(()=>onStart('baseline'))}><FlaskConical size={16}/>运行基线</button><button className="primary" onClick={config.agent.enabled?()=>action(()=>onStart('loop')):onConfigureAgent}>{config.agent.enabled?<Play size={15}/>:<Settings2 size={15}/>}{config.agent.enabled?'开始补测':'配置 Agent 后补测'}</button></>}</div></div>
+    {!busy&&!historical&&!config.agent.enabled&&<div className="inline-note agent-setup-note" role="status"><Bot size={16}/><p>自动补测尚未启用。运行基线无需 Agent；点击“配置 Agent 后补测”，开启“启用自动补测”并保存，即可开始。</p></div>}
     <div className={"run-banner showcase-banner "+(busy?"is-active":"")}><div className={'run-symbol '+(busy?'pulse':'')}><Bot size={22}/>{busy&&<span className="orbit-ring"/>}</div><div><strong>{(busy?snapshot.progress?.message:undefined)||snapshot.message||'工作区已准备就绪'}</strong><p>{round?'第 '+round.round+' 轮验证 · '+new Date(round.finishedAt).toLocaleTimeString():'先运行基线，了解当前测试与覆盖率情况。'}</p></div><Status value={snapshot.status}/>{!busy&&!historical&&<button className="ghost small" onClick={()=>action(()=>onStart('probe'))}>检查 Agent<ArrowUpRight size={14}/></button>}</div>
     {busy&&<div className="phase-ribbon"><RunningWave running/><span>{snapshot.progress?.modules?.filter(m=>m.status==='running').map(m=>`${m.name} · ${m.stage}`).join(' / ')||'执行状态持续更新中'}</span><small>展开底部控制台，查看各模块进度</small></div>}
     <RoundFailure round={round}/><BentoGrid className="metrics-grid max-w-none md:auto-rows-auto md:grid-cols-4">{cards.map((c,i)=><motion.div key={c.title} className="metric-reveal" initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} transition={{delay:i*.06,duration:.35}}><BentoGridItem title={c.title} description={c.note} icon={c.icon} header={<div className="metric-value">{c.value}</div>} className="metric-card"/></motion.div>)}</BentoGrid>

@@ -55,6 +55,10 @@ node scripts/backend.mjs test -Dcoverage.test.maven=/path/to/maven/bin/mvn
 
 Windows 上请用 `mvn.cmd` 的完整路径。
 
+## v1.2.3 · 自动补测启动引导
+
+基线验证无需启用 Agent。未开启“启用自动补测”时，看板显示原因，并提供可点击的“配置 Agent 后补测”入口，直接打开补测策略页；开启并保存后即可点击“开始补测”。修改 Agent 配置时保留当前选择范围、Maven 配置和已有基线展示。自动补测仍作为新任务重新验证，不直接复用可能已过期的基线结果。
+
 ## v1.2.2 · 根 reactor 范围测试
 
 修复内部依赖的已安装 POM 含 `${version_number}` 父版本时，预 install 成功、单模块测试却依赖解析失败的问题。正式测试保留根 POM、`-pl`、`-am`，多个选中模块共用一次 reactor；每个模块的测试范围由内置扩展独立控制，同名测试不会跨模块误执行。预构建强制跳过测试执行但保留测试编译，后续轮次不重复 install。已有版本号、settings、profiles、短仓库路径配置继续生效。

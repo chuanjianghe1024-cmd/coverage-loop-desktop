@@ -41,7 +41,7 @@ test('record tabs follow selected round, discard late responses, and recover onl
 });
 test('missing classes collapse independently from round records',async()=>{
   const user=userEvent.setup();vi.spyOn(api,'request').mockImplementation(async route=>route==='/round/records'?{files:[],directory:'/evidence',recovery:{available:false,reason:'没有会话'}}:{content:'本轮记录',truncated:false});
-  render(<Dashboard config={config} snapshot={{...snapshot,rounds:[round(1,40,3)]}} logs={[]} onStart={vi.fn()} onStop={vi.fn()} busy={false} notify={vi.fn()} historical/>);
+  render(<Dashboard config={config} snapshot={{...snapshot,rounds:[round(1,40,3)]}} logs={[]} onStart={vi.fn()} onConfigureAgent={vi.fn()} onStop={vi.fn()} busy={false} notify={vi.fn()} historical/>);
   expect(screen.getByText('Greeter',{selector:'strong'})).toBeInTheDocument();await user.click(screen.getByRole('button',{name:/未达标类 · R01/}));
   await waitFor(()=>expect(screen.queryByText('Greeter',{selector:'strong'})).not.toBeInTheDocument());expect(screen.getByRole('region',{name:'打开本轮记录'})).toBeInTheDocument();
 });
