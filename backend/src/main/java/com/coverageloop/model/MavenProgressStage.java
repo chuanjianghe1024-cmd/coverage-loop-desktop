@@ -8,6 +8,8 @@ public enum MavenProgressStage {
     agent_probing,
     @SerializedName("agent-running")
     agent_running,
+    @SerializedName("retry-waiting")
+    retry_waiting,
     @SerializedName("preparing")
     preparing,
     @SerializedName("resolving")

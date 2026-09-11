@@ -7,6 +7,7 @@ public class AgentProbeResult {
     public String executable;
     public Integer exitCode;
     public String signal;
+    public String failureKind;
     public String response;
     public String logPath;
     public String startedAt;

@@ -358,7 +358,7 @@ public class AgentRunner {
             return failed;
         }
         child.set(process);
-        if (cancelled.getAsBoolean() || abortRequested) Proc.killTree(process.pid());
+        if (cancelled.getAsBoolean() || abortRequested) Proc.killTree(process);
         long pid = process.pid();
         log.append("[").append(Instant.now()).append("] [PROCESS_STARTED] pid=").append(pid).append("\n");
 
@@ -409,8 +409,10 @@ public class AgentRunner {
         Thread timeoutWatcher = new Thread(() -> {
             try {
                 Thread.sleep(timeoutMs);
-                timedOut.set(true);
-                if (child.get() != null && process.isAlive()) Proc.killTree(pid);
+                if (child.get() == process && process.isAlive()) {
+                    timedOut.set(true);
+                    Proc.killTree(process);
+                }
             } catch (InterruptedException error) {
                 // 进程结束时取消超时监视
             }
@@ -423,7 +425,7 @@ public class AgentRunner {
             int exitCode = process.waitFor();
             processResult = new ProcessExecution(exitCode, null);
         } catch (InterruptedException error) {
-            Proc.killTree(process.pid());
+            Proc.killTree(process);
             Thread.currentThread().interrupt();
             processResult = new ProcessExecution(null, null);
         }
@@ -528,6 +530,7 @@ public class AgentRunner {
 
         AgentProbeResult probe = new AgentProbeResult();
         probe.status = status;
+        probe.failureKind = AgentFailure.classify(status, result.signal, result.stdout + "\n" + result.stderr);
         probe.provider = config.agent.provider;
         probe.executable = command.executable;
         probe.exitCode = result.exitCode;
@@ -537,6 +540,10 @@ public class AgentRunner {
         probe.startedAt = result.startedAt;
         probe.finishedAt = result.finishedAt;
         return probe;
+    }
+
+    protected long roundTimeoutMillis(AgentOptions options) {
+        return (long) options.timeoutMinutes * 60_000;
     }
 
     public AgentRoundResult runRound(ProjectConfig config, MavenRunResult result, String mode) {
@@ -551,7 +558,7 @@ public class AgentRunner {
         Fs.writeString(promptPath, built.prompt + "\n");
         Map<String, TestFileState> before = snapshotTestFiles(config);
         ProcessResult execution = execute(command, built.prompt, workingDirectory, logPath,
-                (long) config.agent.timeoutMinutes * 60_000, config.agent.heartbeatSeconds,
+                roundTimeoutMillis(config.agent), config.agent.heartbeatSeconds,
                 result.runId, result.round, mode);
         Map<String, TestFileState> after = snapshotTestFiles(config);
         List<String> changedTestFiles = writeChangedTests(before, after, changedTestsPath);
@@ -565,6 +572,8 @@ public class AgentRunner {
 
         AgentRoundResult round = new AgentRoundResult();
         round.status = execution.status;
+        round.failureKind = AgentFailure.classify(execution.status, execution.signal, execution.stdout + "\n" + execution.stderr);
+        if (round.failureKind != null) Fs.appendString(logPath, "[" + Instant.now() + "] failure-kind=" + round.failureKind + "\n");
         round.mode = mode;
         round.round = result.round;
         round.exitCode = execution.exitCode;
@@ -586,7 +595,7 @@ public class AgentRunner {
         Process process = child.get();
         if (process == null || !process.isAlive()) return false;
         abortRequested = true;
-        Proc.killTree(process.pid());
+        Proc.killTree(process);
         return true;
     }
 }

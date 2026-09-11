@@ -26,3 +26,19 @@ test('dependency failure shows an invalid round instead of a coverage deficit or
  expect(screen.getByRole('button',{name:/待评估类/})).toBeInTheDocument();expect(screen.getByText('未评估')).toBeInTheDocument();
  expect(metrics(failed).coverage).toBeNull();expect(screen.queryByText('0.0%')).not.toBeInTheDocument();
 });
+test('retry waiting offers both stop modes and graceful stop still allows immediate interruption',async()=>{
+ const user=userEvent.setup(),onStop=vi.fn().mockResolvedValue(undefined);
+ const running={...snapshot,status:'running',mode:'loop',progress:{round:2,stage:'retry-waiting',percent:0,message:'API 超时，等待服务恢复',retryAt:new Date(Date.now()+240000).toISOString(),retryAttempt:3}};
+ const props={config,snapshot:running,logs:[],onStart:vi.fn(),onConfigureAgent:vi.fn(),onStop,busy:true,notify:vi.fn(),historical:false};
+ const view=render(<Dashboard {...props}/>);
+ expect(screen.getByText(/秒后重试/)).toBeInTheDocument();
+ await user.click(screen.getByRole('button',{name:'当前轮结束后停止'}));
+ expect(onStop).toHaveBeenCalledWith('after-round');
+ view.rerender(<Dashboard {...props} snapshot={{...running,stopAfterRoundRequested:true}}/>);
+ expect(screen.getByRole('button',{name:'已请求本轮后停止'})).toBeDisabled();
+ expect(screen.getByText('已请求当前轮结束后停止')).toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'立即停止'})).toBeEnabled();
+ await user.click(screen.getByRole('button',{name:'立即停止'}));
+ expect(onStop).toHaveBeenLastCalledWith('immediate');
+ expect(screen.queryByRole('button',{name:'开始补测'})).not.toBeInTheDocument();
+});

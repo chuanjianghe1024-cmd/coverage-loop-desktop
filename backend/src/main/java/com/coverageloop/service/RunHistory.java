@@ -61,7 +61,7 @@ public final class RunHistory {
         if (runEntries != null) {
             for (File entry : runEntries) {
                 java.util.regex.Matcher matcher = java.util.regex.Pattern
-                        .compile("^round-(\\d{3})-maven\\.log$").matcher(entry.getName());
+                        .compile("^round-(\\d{3,})-maven\\.log$").matcher(entry.getName());
                 if (matcher.matches()) {
                     maxRound = Math.max(maxRound, Integer.parseInt(matcher.group(1)));
                 }

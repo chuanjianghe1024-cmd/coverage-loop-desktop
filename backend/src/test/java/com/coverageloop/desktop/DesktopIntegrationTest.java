@@ -17,6 +17,7 @@ class DesktopIntegrationTest {
         Path file=temp.resolve("workspace.db");
         ProjectConfig c=ConfigFactory.createDefaultConfig(temp.resolve("pom.xml").toString());
         c.agent.coveragePromptTemplate="保存自定义提示词：{{targetClasses}}";
+        c.agent.runUntilTarget=false;c.agent.retryDelaySeconds=120;c.agent.maxRetryDelaySeconds=900;
         Map<String,Object> state=new LinkedHashMap<>();
         state.put("id","job-1");state.put("status","running");state.put("startedAt","2026-09-10T00:00:00Z");
         try(WorkspaceStore store=new WorkspaceStore(file)) {
@@ -27,6 +28,9 @@ class DesktopIntegrationTest {
         }
         try(WorkspaceStore store=new WorkspaceStore(file)) {
             assertEquals(c.agent.coveragePromptTemplate,store.config(c.rootPomPath,"default").agent.coveragePromptTemplate);
+            assertFalse(store.config(c.rootPomPath,"default").agent.runUntilTarget);
+            assertEquals(120,store.config(c.rootPomPath,"default").agent.retryDelaySeconds);
+            assertEquals(900,store.config(c.rootPomPath,"default").agent.maxRetryDelaySeconds);
             JsonObject job=store.detail(c.rootPomPath,"job-1");
             assertEquals("interrupted",job.get("status").getAsString());
             assertEquals(12,job.getAsJsonArray("rounds").get(0).getAsJsonObject().getAsJsonObject("tests").get("tests").getAsInt());

@@ -9,5 +9,7 @@ public class MavenProgressEvent {
     public String message;
     public String timestamp;
     public boolean indeterminate;
+    public String retryAt;
+    public int retryAttempt;
     public java.util.List<com.coverageloop.service.BuildProgress.ModuleState> modules = java.util.List.of();
 }

@@ -29,3 +29,5 @@
 .round-failure{display:flex;align-items:flex-start;gap:12px;margin:16px 0;padding:17px 20px;border:1px solid #edd7b3;background:#fff9ed;border-radius:15px;color:#775020}.round-failure>svg{flex-shrink:0;margin-top:2px}.round-failure strong{font-size:14px}.round-failure p{margin:5px 0;font-size:13px;line-height:1.6}.round-failure small{font-size:12px;line-height:1.7;color:#866944}
 
 .agent-setup-note{margin-bottom:16px}
+
+.retry-status{display:flex;gap:12px;align-items:flex-start;padding:16px 20px;margin:16px 0;border:1px solid #caddb7;background:#f3f9ed;border-radius:14px;color:#4b7037}.retry-status>svg{flex-shrink:0;margin-top:2px}.retry-status strong{font-size:13px}.retry-status p{margin:6px 0;font-size:12px;line-height:1.7}.retry-status small{font-size:11px;color:#789362}

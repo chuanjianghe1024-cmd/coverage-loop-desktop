@@ -113,6 +113,9 @@ public final class ConfigStore {
         target.provider = source.provider == null ? "hermes" : source.provider;
         target.model = source.model == null ? "" : source.model;
         target.maxRounds = source.maxRounds;
+        target.runUntilTarget = source.runUntilTarget;
+        target.retryDelaySeconds = source.retryDelaySeconds;
+        target.maxRetryDelaySeconds = source.maxRetryDelaySeconds;
         target.executable = source.executable == null ? "" : source.executable;
         target.extraArgs = source.extraArgs == null ? new ArrayList<>() : new ArrayList<>(source.extraArgs);
         target.batchSize = source.batchSize;
@@ -142,6 +145,9 @@ public final class ConfigStore {
         value.name = config.name == null || config.name.trim().isEmpty() ? "未命名配置" : config.name.trim();
         value.maven.parallelThreads = clamp(config.maven.parallelThreads, 1, 32, 1);
         value.agent.maxRounds = clamp(config.agent.maxRounds, 1, 100, 1);
+        value.agent.retryDelaySeconds = clamp(config.agent.retryDelaySeconds, 1, 3600, 60);
+        value.agent.maxRetryDelaySeconds = Math.max(value.agent.retryDelaySeconds,
+                clamp(config.agent.maxRetryDelaySeconds, 1, 3600, 600));
         value.agent.batchSize = clamp(config.agent.batchSize, 1, 200, 1);
         value.agent.timeoutMinutes = clamp(config.agent.timeoutMinutes, 1, 240, 1);
         value.agent.maxSameFailures = clamp(config.agent.maxSameFailures, 1, 20, 1);

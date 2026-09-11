@@ -13,6 +13,7 @@ public class AgentRoundResult {
     public int round;
     public Integer exitCode;
     public String signal;
+    public String failureKind;
     public String logPath;
     public String promptPath;
     public String failedClassesPath;

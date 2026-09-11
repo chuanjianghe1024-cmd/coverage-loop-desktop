@@ -9,5 +9,6 @@ public enum CoverageLoopStopReason {
     agent_unavailable,
     agent_failed,
     repeated_maven_failure,
+    after_round,
     aborted
 }

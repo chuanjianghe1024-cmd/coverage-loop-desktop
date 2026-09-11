@@ -9,6 +9,9 @@ public class AgentOptions {
     public String provider = "hermes";
     public String model = "";
     public int maxRounds = 5;
+    public boolean runUntilTarget = true;
+    public int retryDelaySeconds = 60;
+    public int maxRetryDelaySeconds = 600;
     public String executable = "";
     public List<String> extraArgs = new ArrayList<>();
     public int batchSize = 3;
@@ -29,6 +32,9 @@ public class AgentOptions {
         copy.provider = provider;
         copy.model = model;
         copy.maxRounds = maxRounds;
+        copy.runUntilTarget = runUntilTarget;
+        copy.retryDelaySeconds = retryDelaySeconds;
+        copy.maxRetryDelaySeconds = maxRetryDelaySeconds;
         copy.executable = executable;
         copy.extraArgs = new ArrayList<>(extraArgs);
         copy.batchSize = batchSize;

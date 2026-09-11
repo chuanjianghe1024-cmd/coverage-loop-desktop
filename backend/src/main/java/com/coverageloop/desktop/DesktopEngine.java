@@ -23,6 +23,7 @@ public final class DesktopEngine implements AutoCloseable {
     private long sequence;
     private String status = "idle", jobId = "", mode = "", message = "选择一个 Maven 工程开始";
     private String startedAt, finishedAt;
+    private boolean stopAfterRoundRequested;
     private MavenProgressEvent progress;
     private MavenRunResult latest;
     private CoverageLoopResult loopResult;
@@ -46,7 +47,7 @@ public final class DesktopEngine implements AutoCloseable {
             case "/statistics/preview" -> ScopedTests.plan(config(input));
             case "/command/preview" -> runner().resolveMavenCommand(config(input), new MavenRunner.RunOptions());
             case "/run/start" -> start(config(input), required(input,"mode"));
-            case "/run/stop" -> stop();
+            case "/run/stop" -> stop(input.has("mode") ? input.get("mode").getAsString() : "immediate");
             case "/state" -> snapshot(input.has("cursor") ? input.get("cursor").getAsLong() : 0);
             case "/round/records" -> new RoundRecords(store).list(input);
             case "/round/file" -> new RoundRecords(store).read(input);
@@ -125,6 +126,9 @@ public final class DesktopEngine implements AutoCloseable {
         if (c.coverage.branchThreshold != null && c.coverage.branchThreshold != 0) throw new IllegalArgumentException("当前重建版仅支持行覆盖率门禁，请将分支阈值设为 0");
         if (!c.coverage.jacocoVersion.matches("[0-9]+\\.[0-9]+\\.[0-9]+(?:[-.][A-Za-z0-9]+)*")) throw new IllegalArgumentException("JaCoCo 版本格式无效");
         if (c.agent.maxRounds < 1 || c.agent.maxRounds > 1000 || c.agent.batchSize < 1 || c.agent.maxSameFailures < 1 || c.agent.timeoutMinutes < 1) throw new IllegalArgumentException("轮次、批次、熔断次数和超时必须为正数");
+        if (c.agent.retryDelaySeconds < 1 || c.agent.retryDelaySeconds > 3600
+                || c.agent.maxRetryDelaySeconds < c.agent.retryDelaySeconds || c.agent.maxRetryDelaySeconds > 3600)
+            throw new IllegalArgumentException("重试等待应为 1–3600 秒，最长等待不能小于初始等待");
         if (!List.of("hermes","opencode").contains(c.agent.provider)) throw new IllegalArgumentException("不支持的 Agent");
         for (CoverageScope scope : c.scopes) if (!modules.contains(scope.modulePath)) throw new IllegalArgumentException("统计范围包含未知模块");
         if (!c.maven.javaHome.isBlank() && !Files.isRegularFile(Path.of(c.maven.javaHome,"bin", Proc.isWindows() ? "java.exe" : "java"))) throw new IllegalArgumentException("目标工程 JDK 路径无效");
@@ -151,14 +155,14 @@ public final class DesktopEngine implements AutoCloseable {
         if (!List.of("baseline","loop","probe","statistics").contains(taskMode)) throw new IllegalArgumentException("无效任务类型");
         if (!taskMode.equals("probe") && ScopedTests.plan(config).stream().noneMatch(s -> s.sourceCount()>0)) throw new IllegalArgumentException("请在树中选择至少一个生产类");
         if (taskMode.equals("loop") && !config.agent.enabled) throw new IllegalArgumentException("请在 Agent 设置中启用自动补测");
-        cancelled.set(false); latest = null; loopResult = null; probe = null; statistics=null; progress = null;
+        cancelled.set(false); stopAfterRoundRequested = false; latest = null; loopResult = null; probe = null; statistics=null; progress = null;
         status = "running"; mode = taskMode; jobId = UUID.randomUUID().toString(); activeConfig = config.copy();
         startedAt = Instant.now().toString(); finishedAt = null; message = "正在启动任务";
         events.clear(); rounds.clear(); agentRounds.clear();
         try { if (taskMode.equals("statistics")) store.saveStatisticsConfig(config); else store.saveConfig(config); persist(); }
         catch (Exception e) { status = "failed"; message = "无法保存任务，未启动执行"; throw e; }
         maven = runner(); agent = new AgentRunner(sink(), cancelled::get);
-        loop = new CoverageLoopRunner(maven, agent, this::recordRound, result -> { synchronized (DesktopEngine.this) { agentRounds.add(result); try { persist(); } catch (Exception e) { throw new IllegalStateException("保存 Agent 轮次失败", e); } } });
+        loop = new CoverageLoopRunner(maven, agent, this::recordRound, result -> { synchronized (DesktopEngine.this) { agentRounds.add(result); try { persist(); } catch (Exception e) { throw new IllegalStateException("保存 Agent 轮次失败", e); } } }, this::recovery);
         worker.submit(() -> execute(config, taskMode));
         return Map.of("id", jobId);
     }
@@ -191,7 +195,8 @@ public final class DesktopEngine implements AutoCloseable {
                 }
                 case "loop" -> {
                     CoverageLoopResult result = loop.run(config);
-                    synchronized (this) { loopResult = result; latest = result.latest; status = result.stopReason == CoverageLoopStopReason.target_reached ? "completed" : result.stopReason == CoverageLoopStopReason.max_rounds ? "limited" : "failed"; message = result.message; }
+                    synchronized (this) { loopResult = result; latest = result.latest; status = result.stopReason == CoverageLoopStopReason.target_reached ? "completed" : result.stopReason == CoverageLoopStopReason.max_rounds ? "limited"
+                            : result.stopReason == CoverageLoopStopReason.after_round || result.stopReason == CoverageLoopStopReason.aborted ? "cancelled" : "failed"; message = result.message; }
                 }
             }
         } catch (Exception e) {
@@ -205,9 +210,34 @@ public final class DesktopEngine implements AutoCloseable {
             }
         }
     }
-    private synchronized Object stop() {
+    private synchronized void recovery(CoverageLoopRunner.RecoveryNotice notice) {
+        MavenOutputEvent event = new MavenOutputEvent();
+        event.stream = "system"; event.runId = notice.runId(); event.round = notice.round();
+        event.timestamp = Instant.now().toString(); event.text = "[LOOP_RECOVERY] " + notice.message() + "\n";
+        emit("log", event);
+        MavenProgressEvent update = new MavenProgressEvent();
+        update.stage = notice.retryAt() == null ? MavenProgressStage.preparing : MavenProgressStage.retry_waiting;
+        update.runId = notice.runId(); update.round = notice.round(); update.message = notice.message();
+        update.timestamp = event.timestamp; update.indeterminate = true;
+        update.retryAt = notice.retryAt(); update.retryAttempt = notice.attempt();
+        if (progress != null) update.modules = progress.modules;
+        progress = update; message = notice.message();
+        try { persist(); } catch (Exception e) { throw new IllegalStateException("保存重试状态失败", e); }
+    }
+    private synchronized Object stop() { return stop("immediate"); }
+    private synchronized Object stop(String stopMode) {
+        if (!List.of("immediate", "after-round").contains(stopMode)) throw new IllegalArgumentException("无效停止方式");
+        if (stopMode.equals("after-round")) {
+            if (status.equals("running") && mode.equals("loop") && loop != null) {
+                stopAfterRoundRequested = true;
+                loop.stopAfterRound();
+                message = "已请求当前轮结束后停止；本轮测试验证结束后不再启动 Agent";
+                try { persist(); } catch (Exception e) { throw new IllegalStateException("保存停止请求失败", e); }
+            }
+            return Map.of("status", status, "stopAfterRoundRequested", stopAfterRoundRequested);
+        }
         if (status.equals("running") || status.equals("stopping")) {
-            cancelled.set(true); status = "stopping"; message = "正在停止 Maven 和 Agent 进程";
+            cancelled.set(true); stopAfterRoundRequested = false; status = "stopping"; message = "正在停止 Maven 和 Agent 进程";
             if (loop != null) loop.stop(); if (maven != null) maven.stop(); if (agent != null) agent.stop();
         }
         return Map.of("status", status);
@@ -215,6 +245,7 @@ public final class DesktopEngine implements AutoCloseable {
     public synchronized Map<String,Object> snapshot(long cursor) {
         Map<String,Object> value = new LinkedHashMap<>();
         value.put("id",jobId); value.put("status",status); value.put("mode",mode); value.put("message",message);
+        value.put("stopAfterRoundRequested",stopAfterRoundRequested);
         value.put("startedAt",startedAt); value.put("finishedAt",finishedAt); value.put("progress",progress);
         value.put("statistics",statistics);
         value.put("configId",activeConfig==null?null:activeConfig.id); value.put("configName",activeConfig==null?null:activeConfig.name);

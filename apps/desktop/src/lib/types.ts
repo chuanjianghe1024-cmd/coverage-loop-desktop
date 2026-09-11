@@ -3,7 +3,7 @@ export interface Config {
   id: string; name: string; rootPomPath: string; selectedModulePaths: string[]; scopes: Scope[];
   maven: { useBundledMaven: boolean; preInstall: boolean; parallelThreads: number; executable: string; javaHome: string; settingsPath: string; localRepository: string; versionNumber: string; forceUpdate: boolean; profiles: string[]; extraArgs: string[]; testPattern: string };
   coverage: { jacocoVersion: string; lineThreshold: number; branchThreshold: number };
-  agent: { enabled: boolean; provider: string; executable: string; model: string; hermesProvider: string; opencodeAgent: string; opencodeAttach: string; extraArgs: string[]; batchSize: number; maxRounds: number; maxSameFailures: number; timeoutMinutes: number; heartbeatSeconds: number; autoApprove: boolean; allowProductionChanges: boolean; coveragePromptTemplate: string; repairPromptTemplate: string };
+  agent: { enabled: boolean; provider: string; executable: string; model: string; hermesProvider: string; opencodeAgent: string; opencodeAttach: string; extraArgs: string[]; batchSize: number; maxRounds: number; runUntilTarget?: boolean; retryDelaySeconds?: number; maxRetryDelaySeconds?: number; maxSameFailures: number; timeoutMinutes: number; heartbeatSeconds: number; autoApprove: boolean; allowProductionChanges: boolean; coveragePromptTemplate: string; repairPromptTemplate: string };
 }
 export interface Module { name: string; artifactId: string; relativePath: string; packaging: string; hasMainSources: boolean; hasTests: boolean }
 export interface JavaClass { name: string; packageName: string; qualifiedName: string; relativePath: string }
@@ -21,17 +21,17 @@ export interface Round {
   groups: { initialSatisfied: ClassResult[]; pending: ClassResult[]; supplemented: ClassResult[] };
 }
 export interface ModuleProgress {key:string;modulePath:string;name:string;phase:string;stage:string;status:string;startedAt?:string;finishedAt?:string;dependency:boolean}
-export interface Progress { round: number; stage: string; percent: number; message: string; indeterminate?:boolean; modules?:ModuleProgress[] }
+export interface Progress { round: number; stage: string; percent: number; message: string; indeterminate?:boolean; retryAt?:string; retryAttempt?:number; modules?:ModuleProgress[] }
 export interface RoundSelector {rootPomPath:string;id:string;round:number}
 export interface RecordFile {name:string;path:string;exists:boolean;size:number}
 export interface Recovery {available:boolean;reason?:string;sessionId?:string;originRound?:number;provider?:string;executable?:string;args?:string[];cwd?:string}
 export interface RoundRecordsData {files:RecordFile[];directory:string;recovery:Recovery}
 export interface LogEvent { id: number; type: string; data: { text?: string; stream?: string; timestamp?: string } }
 export interface Snapshot {
-  id: string; status: string; mode: string; message: string; configId?: string; configName?: string; statistics?: StatisticsNode; startedAt?: string; finishedAt?: string; progress?: Progress;
-  agentRounds?: { round: number; changedTestFiles: string[]; selectedClassCount: number; completionMarkerSeen: boolean }[];
+  id: string; status: string; mode: string; message: string; stopAfterRoundRequested?:boolean; configId?: string; configName?: string; statistics?: StatisticsNode; startedAt?: string; finishedAt?: string; progress?: Progress;
+  agentRounds?: { round: number; changedTestFiles: string[]; selectedClassCount: number; completionMarkerSeen: boolean; status?:string; failureKind?:string }[];
   latest?: Round; rounds: Round[]; cursor: number; events: LogEvent[]; truncated?: boolean;
-  loop?: { agentRounds: { round: number; changedTestFiles: string[]; selectedClassCount: number; completionMarkerSeen: boolean }[] };
+  loop?: { agentRounds: { round: number; changedTestFiles: string[]; selectedClassCount: number; completionMarkerSeen: boolean; status?:string; failureKind?:string }[] };
 }
 export interface JobSummary { id: string; status: string; mode: string; message: string; startedAt: string; finishedAt?: string; name: string }
 export type PathKind = 'project' | 'settings' | 'jdk' | 'maven' | 'agent' | 'repository';

@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CoreLogicTest {
 
     @Test void dependencyFailureStopsBeforeAnAgentCanTreatUnmeasuredClassesAsMissingTests() throws Exception {
-        var config=new com.coverageloop.model.ProjectConfig();config.agent.enabled=true;config.selectedModulePaths=List.of("module-a");
+        var config=new com.coverageloop.model.ProjectConfig();config.agent.enabled=true;config.agent.runUntilTarget=false;config.selectedModulePaths=List.of("module-a");
         var failure=new com.coverageloop.model.MavenRunResult();failure.round=1;failure.exitCode=1;
         failure.tests.status=com.coverageloop.model.TestExecutionStatus.build_failed;failure.tests.failureKind="dependency-resolution";failure.tests.message="依赖解析失败，本轮覆盖率无效";
         var sink=new com.coverageloop.service.MavenRunner.OutputSink(){public void output(com.coverageloop.model.MavenOutputEvent e){}public void progress(com.coverageloop.model.MavenProgressEvent e){}};

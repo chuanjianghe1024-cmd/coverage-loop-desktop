@@ -42,6 +42,7 @@ public class MavenRunner {
 
     public static class RunOptions {
         public boolean fullProject;
+        public boolean forcePreInstall;
         public boolean continueOnTestFailure;
         public boolean scopeTests;
     }
@@ -257,7 +258,7 @@ public class MavenRunner {
         updateProgress(prepared, 3, MavenProgressStage.preparing, "正在准备 Maven 命令与日志目录");
 
         ProcessExecution execution;
-        boolean shouldPreInstall = prepared.round == 1 && command.preInstallArgs != null;
+        boolean shouldPreInstall = (prepared.round == 1 || options.forcePreInstall) && command.preInstallArgs != null;
         Integer preInstallExitCode = null;
         try {
             if (shouldPreInstall && command.preInstallArgs != null) {
@@ -452,7 +453,7 @@ public class MavenRunner {
                 java.nio.file.StandardOpenOption.CREATE,java.nio.file.StandardOpenOption.APPEND);
         Process process = builder.start();
         child.set(process);
-        if (cancelled.getAsBoolean() || stopRequested) Proc.killTree(process.pid());
+        if (cancelled.getAsBoolean() || stopRequested) Proc.killTree(process);
         long pid = process.pid();
         long processStartedAt = System.currentTimeMillis();
         lastProcessOutputAt.set(processStartedAt);
@@ -493,7 +494,7 @@ public class MavenRunner {
 
         int exitCode;
         try { exitCode = process.waitFor(); }
-        catch (InterruptedException e) { Proc.killTree(process.pid()); heartbeat.interrupt(); child.set(null); writer.close(); Thread.currentThread().interrupt(); throw e; }
+        catch (InterruptedException e) { Proc.killTree(process); heartbeat.interrupt(); child.set(null); writer.close(); Thread.currentThread().interrupt(); throw e; }
         heartbeat.interrupt();
         stdoutThread.join();
         stderrThread.join();
@@ -598,7 +599,7 @@ public class MavenRunner {
         stopRequested = true;
         Process process = child.get();
         if (process == null || !process.isAlive()) return false;
-        Proc.killTree(process.pid());
+        Proc.killTree(process);
         return true;
     }
 

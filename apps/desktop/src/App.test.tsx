@@ -31,6 +31,10 @@ test('root + settings -> module/class rules -> editable prompts and batch -> sav
  await user.click(screen.getByRole('checkbox',{name:'选择类 com.sample.a.Other'}));
  await user.click(screen.getByRole('button',{name:'配置补测策略'}));
  await user.click(screen.getByRole('checkbox',{name:/启用自动补测/}));
+ expect(screen.getByRole('checkbox',{name:/持续运行直到达标/})).toBeChecked();
+ expect(screen.queryByLabelText('最多验证轮数')).not.toBeInTheDocument();
+ await user.clear(screen.getByLabelText('初始重试等待（秒）'));await user.type(screen.getByLabelText('初始重试等待（秒）'),'90');
+ await user.clear(screen.getByLabelText('最长重试等待（秒）'));await user.type(screen.getByLabelText('最长重试等待（秒）'),'900');
  const batch=screen.getByLabelText('每批处理类数');await user.clear(batch);await user.type(batch,'5');
  await user.clear(screen.getByLabelText('覆盖率补充提示词'));await user.type(screen.getByLabelText('覆盖率补充提示词'),'优先验证边界条件');
  await user.click(screen.getByRole('button',{name:'保存并进入看板'}));
@@ -39,6 +43,7 @@ test('root + settings -> module/class rules -> editable prompts and batch -> sav
  expect(saved.maven.settingsPath).toBe('/company/settings.xml');
  expect(saved.maven.versionNumber).toBe('1.0.0');expect(saved.maven.forceUpdate).toBe(true);
  expect(saved.agent.batchSize).toBe(5);expect(saved.agent.coveragePromptTemplate).toBe('优先验证边界条件');
+ expect(saved.agent.retryDelaySeconds).toBe(90);expect(saved.agent.maxRetryDelaySeconds).toBe(900);
  expect(saved.maven.localRepository).toBe('D:/m2');
  expect(saved.scopes).toEqual([{modulePath:'module-a',kind:'class',pattern:'com.sample.a.Greeter',mode:'include'}]);
  expect(screen.getByRole('button',{name:'开始补测'})).toBeEnabled();

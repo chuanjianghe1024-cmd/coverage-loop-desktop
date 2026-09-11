@@ -78,8 +78,9 @@ public final class Proc {
     }
 
     /** 终止整个进程树（Windows 用 taskkill /T /F） */
-    public static void killTree(long pid) {
-        if (pid <= 0) return;
+    public static void killTree(Process process) {
+        if (process == null) return;
+        long pid = process.pid();
         if (isWindows()) {
             try {
                 new ProcessBuilder("taskkill", "/pid", String.valueOf(pid), "/t", "/f")
@@ -88,11 +89,10 @@ public final class Proc {
                 // 进程可能已退出
             }
         } else {
-            ProcessHandle.of(pid).ifPresent(parent -> {
-                var descendants = parent.descendants().toList();
-                for (int i = descendants.size() - 1; i >= 0; i--) descendants.get(i).destroyForcibly();
-                parent.destroyForcibly();
-            });
+            var descendants = process.descendants().toList();
+            for (int i = descendants.size() - 1; i >= 0; i--) descendants.get(i).destroyForcibly();
+            // Keep the original child handle: looking it up again by PID can fail in a PID namespace.
+            process.destroyForcibly();
         }
     }
 
