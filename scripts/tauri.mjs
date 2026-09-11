@@ -13,4 +13,9 @@ function run(script,args=[],cwd=root){
 run(path.join(root,'scripts/backend.mjs'),['package','-DskipTests']);
 // Also stage resources for tauri-build; debug execution still uses the developer's JDK.
 run(path.join(root,'scripts/runtime.mjs'));
+if(process.platform==='win32'){
+  const prepared=spawnSync('powershell.exe',['-NoProfile','-File',path.join(root,'scripts/tauri-runtime.ps1')],{cwd:root,stdio:'inherit'});
+  if(prepared.error)throw prepared.error;
+  if(prepared.status!==0)process.exit(prepared.status??1);
+}
 run(path.join(root,'node_modules/@tauri-apps/cli/tauri.js'),[mode,...process.argv.slice(3)],path.join(root,'apps/desktop'));

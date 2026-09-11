@@ -6,6 +6,7 @@
 
 - 安装包名为 `Coverage Loop Tauri`，应用标识 `com.coverageloop.desktop.tauri`，与正式版并行安装。
 - 保留内置 Java 运行时，启动软件无需另外安装 JDK；执行目标 Maven 工程仍使用工程配置的 JDK / Maven。
+- Windows 10 1903+ / Windows 11：为内置 Java 启动器合并 UTF-8 进程清单，使中文安装路径在英文 Windows 上也能使用，不修改系统语言或工程 JDK。构建使用 Windows SDK 的 `mt.exe`，依据 [Microsoft 进程 UTF-8 清单说明](https://learn.microsoft.com/en-us/windows/apps/design/globalizing/use-utf8-code-page)。
 - 使用已有 WebView2；电脑缺少时，安装器联网下载。没有把离线 WebView2 安装器放入应用包。内网机器应先部署 WebView2。
 - 试用版使用独立 SQLite 工作区。第一次启动时，检测 Electron 的 `Coverage Loop`、`@coverage-loop/desktop` 或 `coverage-loop-desktop` 数据目录，选取最近更新的旧数据库。
 - 导入使用 SQLite `VACUUM INTO`，包含已提交 WAL 数据；不直接复制正在使用的 `.db` 文件，不修改旧数据库，不覆盖已经存在的试用版数据库。
