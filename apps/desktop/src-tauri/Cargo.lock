@@ -545,6 +545,7 @@ name = "coverage-loop-tauri"
 version = "1.4.0-beta.1"
 dependencies = [
  "base64 0.22.1",
+ "dunce",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

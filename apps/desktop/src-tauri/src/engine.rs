@@ -85,6 +85,15 @@ impl Engine {
             return Err("找不到 Java 执行内核，请先构建后端或重新安装应用".into());
         }
         std::fs::create_dir_all(&paths.data).map_err(|e| e.to_string())?;
+        let jar = dunce::canonicalize(&paths.jar).map_err(|e| e.to_string())?;
+        let data = dunce::canonicalize(&paths.data).map_err(|e| e.to_string())?;
+        // Keep PATH lookup for a bare executable name. Resolve relative executable
+        // paths before changing the child's working directory.
+        let java = if paths.java.is_absolute() || paths.java.components().count() > 1 {
+            dunce::canonicalize(&paths.java).map_err(|e| e.to_string())?
+        } else {
+            paths.java
+        };
         let token = format!(
             "{}{}",
             uuid::Uuid::new_v4().simple(),
@@ -96,18 +105,24 @@ impl Engine {
             .timeout(Duration::from_secs(120))
             .build()
             .map_err(|e| e.to_string())?;
-        let mut command = Command::new(&paths.java);
+        let mut command = Command::new(java);
         command
+            // Windows resource_dir has a verbatim \\?\ prefix, which Java's JAR
+            // launcher cannot open. Pass a relative JAR name from its directory.
+            .current_dir(jar.parent().ok_or("内核目录无效")?)
             .arg("-jar")
-            .arg(&paths.jar)
+            .arg(jar.file_name().ok_or("内核文件名无效")?)
             .env("COVERAGE_SESSION_TOKEN", &token)
             .env("COVERAGE_PARENT_PIPE", "1")
-            .env("COVERAGE_DATA_DIR", &paths.data)
+            .env("COVERAGE_DATA_DIR", data)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         if let Some(legacy) = paths.legacy {
-            command.env("COVERAGE_IMPORT_DB", legacy);
+            command.env(
+                "COVERAGE_IMPORT_DB",
+                dunce::canonicalize(legacy).map_err(|e| e.to_string())?,
+            );
         } else {
             command.env_remove("COVERAGE_IMPORT_DB");
         }
@@ -260,11 +275,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn real_java_handshake_and_authenticated_requests_stop_cleanly() {
+    async fn real_java_handles_canonical_unicode_paths_and_stops_cleanly() {
         let Some(jar) = std::env::var_os("COVERAGE_TEST_ENGINE_JAR") else {
             return;
         };
         let data = tempfile::tempdir().unwrap();
+        let resources = data.path().join("内核 空格");
+        std::fs::create_dir(&resources).unwrap();
+        let copied_jar = resources.join("coverage-loop-engine.jar");
+        std::fs::copy(jar, &copied_jar).unwrap();
+        // std canonicalize deliberately supplies the same Windows verbatim path
+        // returned by Tauri in an installed build, unlike a normal JAVA_HOME path.
+        let jar = copied_jar.canonicalize().unwrap();
         let java = std::env::var_os("JAVA_HOME")
             .map(|p| {
                 PathBuf::from(p)
@@ -274,8 +296,8 @@ mod tests {
             .unwrap_or_else(|| "java".into());
         let engine = Engine::start(EnginePaths {
             java,
-            jar: jar.into(),
-            data: data.path().to_owned(),
+            jar,
+            data: data.path().canonicalize().unwrap(),
             legacy: None,
         })
         .unwrap();

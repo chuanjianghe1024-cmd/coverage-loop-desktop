@@ -3,7 +3,7 @@ $repo = Split-Path $PSScriptRoot -Parent
 $installer = Get-ChildItem "$repo/apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
 if (!$installer) { throw 'Tauri installer missing' }
 $testRoot = Join-Path $env:RUNNER_TEMP ('coverage-tauri-' + [guid]::NewGuid())
-$installed = Join-Path $testRoot 'installed'
+$installed = Join-Path $testRoot 'installed 应用'
 $project = Join-Path $testRoot 'project'
 New-Item -ItemType Directory -Force $testRoot,$project | Out-Null
 Copy-Item "$repo/backend/src/test/resources/sample-project/*" $project -Recurse

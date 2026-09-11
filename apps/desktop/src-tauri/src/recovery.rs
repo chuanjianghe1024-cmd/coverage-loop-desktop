@@ -146,7 +146,9 @@ mod tests {
             "--resume".into(),
             "中文 ' $() ; & ` safe".into(),
         ];
-        let script = powershell_script(&file.to_string_lossy(), &expected, temp.path()).unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let cwd = policy::project_root(std::slice::from_ref(&root), &root).unwrap();
+        let script = powershell_script(&file.to_string_lossy(), &expected, &cwd).unwrap();
         let result = Command::new("powershell.exe")
             .args(["-NoProfile", "-EncodedCommand", &encoded_script(&script)])
             .output()

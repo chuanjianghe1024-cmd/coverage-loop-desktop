@@ -30,7 +30,7 @@ pub fn artifact_path(roots: &[PathBuf], input: &Path) -> Result<PathBuf, String>
             .canonicalize()
             .is_ok_and(|evidence| target.starts_with(evidence))
     }) {
-        Ok(target)
+        Ok(dunce::simplified(&target).to_path_buf())
     } else {
         Err("只能打开当前工程的 Coverage Loop 运行记录".into())
     }
@@ -39,7 +39,7 @@ pub fn artifact_path(roots: &[PathBuf], input: &Path) -> Result<PathBuf, String>
 pub fn project_root(roots: &[PathBuf], input: &Path) -> Result<PathBuf, String> {
     let target = input.canonicalize().map_err(|e| e.to_string())?;
     if roots.contains(&target) {
-        Ok(target)
+        Ok(dunce::simplified(&target).to_path_buf())
     } else {
         Err("请先打开会话对应的工程".into())
     }

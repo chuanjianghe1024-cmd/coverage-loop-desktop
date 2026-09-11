@@ -120,7 +120,7 @@ async fn choose_path(window: WebviewWindow, kind: String) -> Result<Option<Strin
         selected
             .map(|p| {
                 p.into_path()
-                    .map(|p| p.to_string_lossy().into_owned())
+                    .map(|p| dunce::simplified(&p).to_string_lossy().into_owned())
                     .map_err(|e| e.to_string())
             })
             .transpose()
