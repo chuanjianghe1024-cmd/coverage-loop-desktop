@@ -55,6 +55,14 @@ node scripts/backend.mjs test -Dcoverage.test.maven=/path/to/maven/bin/mvn
 
 Windows 上请用 `mvn.cmd` 的完整路径。
 
+## Tauri 试用分支 · 1.4.0-beta.1
+
+`feat/tauri-desktop` 提供 Tauri 2 / Rust 桌面壳，保留现有 React 界面与 Java 执行内核。试用版独立安装，首次启动导入原版 SQLite 工作区，保留原版数据库和日志。
+
+运行 `npm run dev:tauri` 开发，`npm run package:tauri` 构建 Windows 安装包。CI 同时生成 Electron / Tauri 安装包、执行安装后启动验证并输出实测体积比较。安装器复用系统 WebView2，缺少时联网安装。
+
+构建条件、数据兼容方式和试用范围见 [Tauri 试用版说明](docs/TAURI-TRIAL.md)。
+
 ## v1.3.0 · 持续补测与故障恢复
 
 默认开启 **持续运行直到达标**，旧配置缺失此字段时也采用该模式。原来的最多轮数、重复失败熔断不再自动结束持续任务；同一测试/编译问题达到次数后，改为延长等待再修复。关闭持续模式可恢复轮数限制和重复失败熔断。

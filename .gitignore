@@ -37,3 +37,6 @@ test-results/
 # Aceternity components are downloaded from the licensed upstream registry.
 apps/desktop/src/components/ui/bento-grid.tsx
 apps/desktop/src/components/ui/hover-border-gradient.tsx
+
+# Tauri generated resources and schema
+apps/desktop/src-tauri/gen/

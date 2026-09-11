@@ -66,6 +66,8 @@ public final class DesktopServer implements AutoCloseable {
     }
     @Override public void close() { engine.close(); server.stop(0); http.shutdownNow(); }
     public static void main(String[] args) throws Exception {
+        String legacy = System.getenv("COVERAGE_IMPORT_DB");
+        if (legacy != null && !legacy.isBlank()) WorkspaceImport.importIfNeeded(java.nio.file.Path.of(legacy), WorkspaceStore.defaultPath());
         DesktopServer service = new DesktopServer(System.getenv("COVERAGE_SESSION_TOKEN"));
         Runtime.getRuntime().addShutdownHook(new Thread(service::close));
         service.start();

@@ -33,7 +33,7 @@ export interface Snapshot {
   latest?: Round; rounds: Round[]; cursor: number; events: LogEvent[]; truncated?: boolean;
   loop?: { agentRounds: { round: number; changedTestFiles: string[]; selectedClassCount: number; completionMarkerSeen: boolean; status?:string; failureKind?:string }[] };
 }
-export interface JobSummary { id: string; status: string; mode: string; message: string; startedAt: string; finishedAt?: string; name: string }
+export interface JobSummary { importedFromLegacy?:boolean; id: string; status: string; mode: string; message: string; startedAt: string; finishedAt?: string; name: string }
 export type PathKind = 'project' | 'settings' | 'jdk' | 'maven' | 'agent' | 'repository';
 export interface Bridge { request: <T>(route: string, payload?: unknown) => Promise<T>; choosePath: (kind: PathKind) => Promise<string | null>; openArtifact: (path: string) => Promise<void>; recoverSession:(selector:RoundSelector)=>Promise<{sessionId:string}>; version: string }
 declare global { interface Window { coverage?: Bridge } }

@@ -17,7 +17,10 @@
     "package:win": "npm run build && node scripts/runtime.mjs && npm run package:win --workspace apps/desktop",
     "test:ui": "npm run test --workspace apps/desktop",
     "postinstall": "node scripts/sync-aceternity.mjs",
-    "ui:sync": "node scripts/sync-aceternity.mjs"
+    "ui:sync": "node scripts/sync-aceternity.mjs",
+    "dev:tauri": "node scripts/tauri.mjs dev",
+    "package:tauri": "node scripts/tauri.mjs build",
+    "test:rust": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib --no-default-features"
   },
   "engines": {
     "node": ">=22.12.0"

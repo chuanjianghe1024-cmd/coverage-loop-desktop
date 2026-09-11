@@ -104,7 +104,7 @@ public final class WorkspaceStore implements AutoCloseable {
         List<JsonObject> result=new ArrayList<>();
         for(JsonObject row:rows("SELECT content FROM jobs WHERE root_pom=? ORDER BY started_at DESC LIMIT 30",root)) {
             JsonObject summary=new JsonObject();
-            for(String key:List.of("id","status","mode","message","startedAt","finishedAt","name")) if(row.has(key)) summary.add(key,row.get(key));
+            for(String key:List.of("id","status","mode","message","startedAt","finishedAt","name","importedFromLegacy")) if(row.has(key)) summary.add(key,row.get(key));
             result.add(summary);
         }
         return result;
@@ -118,6 +118,8 @@ public final class WorkspaceStore implements AutoCloseable {
     }
     public synchronized String deleteJob(String root,String id,boolean deleteFiles) throws Exception {
         JsonObject job=detail(root,id);
+        if(deleteFiles && job.has("importedFromLegacy") && job.get("importedFromLegacy").getAsBoolean())
+            throw new IllegalStateException("这条记录从原版导入，日志仍由原版使用；可以仅删除试用版中的记录");
         if(List.of("running","stopping").contains(job.get("status").getAsString()))throw new IllegalStateException("正在运行的记录不能删除");
         Set<Path> otherReferences=new LinkedHashSet<>();
         if(deleteFiles)for(JsonObject other:rows("SELECT content FROM jobs WHERE id<>?",id))otherReferences.addAll(HistoryArtifacts.references(other));
