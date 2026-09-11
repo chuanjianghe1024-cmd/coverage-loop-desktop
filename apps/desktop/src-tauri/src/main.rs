@@ -15,6 +15,34 @@ use tauri::{Manager, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 
+fn startup_trace(message: &str) {
+    if let Some(report) = std::env::var_os("COVERAGE_SMOKE_REPORT") {
+        use std::io::Write;
+        let path = PathBuf::from(report).with_extension("log");
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = writeln!(file, "{:?} {message}", std::time::SystemTime::now());
+        }
+    }
+}
+
+fn smoke_failure(message: &str) -> bool {
+    startup_trace(message);
+    if let Some(report) = std::env::var_os("COVERAGE_SMOKE_REPORT") {
+        let _ = std::fs::write(
+            report,
+            serde_json::to_vec_pretty(&json!({"status":"failed","error":message}))
+                .unwrap_or_default(),
+        );
+        true
+    } else {
+        false
+    }
+}
+
 fn trusted(window: &WebviewWindow) -> Result<(), String> {
     if window.label() == "main" && window.url().is_ok_and(|url| policy::local_url(&url)) {
         Ok(())
@@ -44,6 +72,7 @@ async fn coverage_request(
     let result = engine
         .request(&route, payload.unwrap_or_else(|| json!({})))
         .await?;
+    startup_trace(&format!("bridge request completed: {route}"));
     if route == "/project/open" {
         let root = result["project"]["rootDirectory"]
             .as_str()
@@ -197,6 +226,7 @@ async fn smoke(engine: &Engine, project: &str) -> Result<Value, String> {
 }
 
 fn main() {
+    startup_trace("native main entered");
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(window) = app.get_webview_window("main") {
@@ -217,6 +247,7 @@ fn main() {
             recover_session
         ])
         .setup(|app| {
+            startup_trace("Tauri setup entered");
             let handle = app.handle().clone();
             let resources = app.path().resource_dir()?;
             let config_dir = app.path().config_dir()?;
@@ -224,6 +255,13 @@ fn main() {
                 .map(PathBuf::from)
                 .unwrap_or(app.path().app_data_dir()?);
             let paths = EnginePaths::resolve(&resources, &config_dir, data);
+            startup_trace(&format!(
+                "resources={} java={} jar={} data={}",
+                resources.display(),
+                paths.java.display(),
+                paths.jar.display(),
+                paths.data.display()
+            ));
             tauri::async_runtime::spawn(async move {
                 let started =
                     tauri::async_runtime::spawn_blocking(move || Engine::start(paths)).await;
@@ -234,6 +272,10 @@ fn main() {
                 let engine = match started {
                     Ok(engine) => Arc::new(engine),
                     Err(message) => {
+                        if smoke_failure(&message) {
+                            handle.exit(1);
+                            return;
+                        }
                         let quit = handle.clone();
                         handle
                             .dialog()
@@ -244,7 +286,9 @@ fn main() {
                         return;
                     }
                 };
+                startup_trace("Java engine ready");
                 handle.manage(Arc::clone(&engine));
+                startup_trace("creating WebView window");
                 let built = tauri::WebviewWindowBuilder::new(
                     &handle,
                     "main",
@@ -262,12 +306,14 @@ fn main() {
                 let window = match built {
                     Ok(window) => window,
                     Err(e) => {
+                        smoke_failure(&format!("无法创建窗口：{e}"));
                         engine.shutdown();
                         eprintln!("无法创建窗口：{e}");
                         handle.exit(1);
                         return;
                     }
                 };
+                startup_trace("WebView window created");
                 let pending = Arc::new(AtomicBool::new(false));
                 let close_engine = Arc::clone(&engine);
                 let close_handle = handle.clone();
@@ -294,12 +340,14 @@ fn main() {
                         tokio::time::sleep(Duration::from_millis(100)).await;
                     }
                     let result = if engine.ui_ready.load(Ordering::SeqCst) {
+                        startup_trace("WebView IPC ready; checking workspace");
                         smoke(&engine, &project.to_string_lossy()).await
                     } else {
                         Err("WebView 页面未能通过 Tauri 桥接访问执行内核".into())
                     };
                     let mut code = if result.is_ok() { 0 } else { 1 };
                     let report = result.unwrap_or_else(|e| json!({"status":"failed","error":e}));
+                    startup_trace(&format!("smoke result: {report}"));
                     if std::fs::write(
                         report_path,
                         serde_json::to_vec_pretty(&report).unwrap_or_default(),
@@ -309,6 +357,7 @@ fn main() {
                         code = 1;
                     }
                     engine.shutdown();
+                    startup_trace("Java engine stopped; exiting shell");
                     handle.exit(code);
                     return;
                 }
@@ -341,6 +390,7 @@ fn main() {
             }
         }),
         Err(e) => {
+            smoke_failure(&format!("Coverage Loop 无法启动：{e}"));
             eprintln!("Coverage Loop 无法启动：{e}");
             std::process::exit(1);
         }
